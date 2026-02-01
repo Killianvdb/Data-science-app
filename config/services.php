@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'python' => [
+        // Path to Python executable
+        // Auto-detect or specify: 'python3', '/usr/bin/python3', etc.
+        'path' => env('PYTHON_PATH', 'python3'),
+        
+        // Maximum execution time in seconds
+        'timeout' => env('PYTHON_TIMEOUT', 3600),
+    ],
+
 ];
