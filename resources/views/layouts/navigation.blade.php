@@ -4,7 +4,7 @@
             <div class="flex">
                 <!-- Logo -->
                 <div class="shrink-0 flex items-center">
-                    <a href="{{ auth()->check() ? route('datasets.create') : route('how-it-works') }}">
+                    <a href="{{ auth()->check() ? route('datasets.index') : route('how-it-works') }}">
                         <img
                             src="{{ asset('images/logo_cleanmydata.png') }}"
                             alt="CleanMyData Logo"
@@ -16,11 +16,11 @@
                 <!-- Navigation Links (Desktop) -->
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                     @auth
-                        <x-nav-link :href="route('datasets.create')" :active="request()->routeIs('datasets.create')">
+                        <x-nav-link :href="route('datasets.index')" :active="request()->routeIs('datasets.index')">
                             {{ __('Clean My Data') }}
                         </x-nav-link>
 
-                        <x-nav-link :href="route('datasets.index')" :active="request()->routeIs('datasets.index')">
+                        <x-nav-link :href="route('datasets.files')" :active="request()->routeIs('datasets.files')">
                             {{ __('My Datasets') }}
                         </x-nav-link>
 
@@ -104,11 +104,11 @@
     <div :class="{ 'block': open, 'hidden': !open }" class="hidden sm:hidden bg-white border-t">
         <div class="pt-2 pb-3 space-y-1">
             @auth
-                <x-responsive-nav-link :href="route('datasets.create')">
+                <x-responsive-nav-link :href="route('datasets.index')">
                     {{ __('Clean My Data') }}
                 </x-responsive-nav-link>
 
-                <x-responsive-nav-link :href="route('datasets.index')">
+                <x-responsive-nav-link :href="route('datasets.files')">
                     {{ __('My Datasets') }}
                 </x-responsive-nav-link>
             @endauth

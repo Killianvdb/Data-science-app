@@ -14,19 +14,23 @@
 </head>
 
 <body class="font-sans antialiased text-slate-700 relative overflow-x-hidden flex flex-col min-h-screen">
+    
 
     <div class="fixed inset-0 -z-10">
         <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-sky-300/40 rounded-full blur-3xl"></div>
         <div class="absolute top-[20%] right-[-10%] w-[600px] h-[600px] bg-indigo-300/30 rounded-full blur-3xl"></div>
         <div class="absolute bottom-[-10%] left-[20%] w-[500px] h-[500px] bg-sky-200/40 rounded-full blur-3xl"></div>
     </div>
+    
 
     <div class="h-1 bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-400"></div>
 
     @include('layouts.navigation')
 
+    
+
     @isset($header)
-        <header class="relative overflow-hidden bg-white/50 backdrop-blur-lg shadow-sm">
+        <header class="relative -z-10 bg-white/50 backdrop-blur-lg shadow-sm">
             <div class="max-w-7xl mx-auto py-6 px-6">
                 <h1 class="text-3xl font-bold text-slate-800">{{ $header }}</h1>
                 <p class="mt-2 text-slate-500 max-w-2xl">
