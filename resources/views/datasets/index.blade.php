@@ -8,7 +8,7 @@
     <div class="py-12">
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6 space-y-6">
-                
+
                 <div>
                     <h1 class="text-2xl font-bold text-gray-800 mb-1">Data Cleaning Tool</h1>
                     <p class="text-gray-600">Upload files to clean and convert to CSV format using AI-driven imputation.</p>
@@ -22,12 +22,12 @@
 
                 <form id="uploadForm" enctype="multipart/form-data" class="space-y-6">
                     @csrf
-                    
+
                     <div>
                         <label class="block font-medium text-gray-700 mb-2">Select Dataset File</label>
-                        <input 
-                            type="file" 
-                            name="file" 
+                        <input
+                            type="file"
+                            name="file"
                             id="fileInput"
                             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                             required
@@ -36,7 +36,7 @@
 
                     <div class="border-t pt-6">
                         <h3 class="text-lg font-semibold text-gray-700 mb-4">Advanced Options (Optional)</h3>
-                        
+
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Row Threshold (0-1)</label>
@@ -59,10 +59,10 @@
                                         View Default List
                                     </button>
                                 </div>
-                                
+
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <input type="text" name="special_characters" placeholder="e.g. $,?" 
+                                        <input type="text" name="special_characters" placeholder="e.g. $,?"
                                             class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                         <p class="text-xs text-gray-500 mt-1">Comma separated list of chars</p>
                                     </div>
@@ -99,7 +99,7 @@
                         <button type="submit" id="submitBtn" class="inline-flex items-center px-6 py-3 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 transition duration-150">
                             Start Cleaning Process
                         </button>
-                        <a href="{{ route('datasets.index') }}" class="text-sm text-gray-600 hover:text-gray-900 underline">
+                        <a href="{{ route('datasets.files') }}" class="text-sm text-gray-600 hover:text-gray-900 underline">
                             View My Datasets
                         </a>
                     </div>
@@ -117,7 +117,7 @@
         </div>
     </div>
 
-    
+
     <script>
         function toggleCharList() {
             const list = document.getElementById('defaultCharList');
@@ -130,14 +130,14 @@
             const progressDiv = document.getElementById('progressDiv');
             const resultDiv = document.getElementById('resultDiv');
             const fileInput = document.getElementById('fileInput');
-            
+
             progressDiv.classList.remove('hidden');
             resultDiv.classList.add('hidden');
             submitBtn.disabled = true;
             submitBtn.textContent = 'Processing...';
-            
+
             const formData = new FormData(this);
-            
+
             try {
                 const response = await fetch('{{ route("datasets.upload") }}', {
                     method: 'POST',
@@ -147,11 +147,11 @@
                         'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value
                     }
                 });
-                
+
                 const result = await response.json();
                 progressDiv.classList.add('hidden');
                 resultDiv.classList.remove('hidden');
-                
+
                 if (result.status === 'success') {
                     const originalFileName = fileInput.files[0].name.split('.')[0];
                     const prettyDownloadUrl = `${result.download_url}/${originalFileName}_CLEANED.csv`;
