@@ -15,7 +15,8 @@ class DataCleaningService
     public function __construct()
     {
         // Auto-detect Python path or use config
-        $this->pythonPath = config('services.python.path', 'python3');
+        //$this->pythonPath = config('services.python.path', 'python3');
+        $this->pythonPath = base_path('venv/Scripts/python.exe');
         $this->scriptPath = base_path('python_scripts/data_cleaner.py');
     }
 
@@ -48,6 +49,9 @@ class DataCleaningService
             $outputPath
         ];
 
+        //temporary
+        Log::info('Python used for cleaning', ['python' => $this->pythonPath]);
+
         // Add options as JSON if provided
         if (!empty($options)) {
             $command[] = json_encode($options);
@@ -56,19 +60,19 @@ class DataCleaningService
         // Create and run process
         $process = new Process($command);
         $process->setTimeout(3600); // 1 hour timeout for large files
-        
+
         try {
             $process->mustRun();
-            
+
             $output = $process->getOutput();
             $result = json_decode($output, true);
-            
+
             if (!$result) {
                 throw new \Exception("Failed to parse Python script output");
             }
 
             Log::info('Data cleaning completed', $result);
-            
+
             return $result;
 
         } catch (ProcessFailedException $exception) {
@@ -78,7 +82,7 @@ class DataCleaningService
                 'input' => $inputPath,
                 'output' => $outputPath
             ]);
-            
+
             throw new \Exception("Data cleaning failed: " . $error);
         }
     }
@@ -94,38 +98,38 @@ class DataCleaningService
     {
         // Use Storage facade to get the real path
         $disk = Storage::disk('local');
-        
+
         // Check if file exists using Storage
         if (!$disk->exists($storagePath)) {
             throw new \Exception("File not found in storage: {$storagePath}");
         }
-        
+
         // Get the actual filesystem path
         $inputPath = $disk->path($storagePath);
-        
+
         Log::info('Processing file', [
             'storage_path' => $storagePath,
             'real_path' => $inputPath,
             'exists' => file_exists($inputPath)
         ]);
-        
+
         // Generate output filename
         $pathInfo = pathinfo($storagePath);
         $outputFilename = $pathInfo['filename'] . '_CLEANED.csv';
-        
+
         // Use storage_path for output
         $outputDir = storage_path('app/cleaned_output');
         if (!is_dir($outputDir)) {
             mkdir($outputDir, 0755, true);
         }
-        
+
         $outputPath = $outputDir . '/' . $outputFilename;
 
         $result = $this->cleanFile($inputPath, $outputPath, $options);
-        
+
         // Add storage path to result
         $result['cleaned_file_path'] = 'cleaned_output/' . $outputFilename;
-        
+
         return $result;
     }
 
@@ -139,7 +143,7 @@ class DataCleaningService
     public function cleanBatch(array $files, array $options = [])
     {
         $results = [];
-        
+
         foreach ($files as $file) {
             try {
                 $results[] = $this->cleanUploadedFile($file, $options);
@@ -151,7 +155,7 @@ class DataCleaningService
                 ];
             }
         }
-        
+
         return $results;
     }
 
