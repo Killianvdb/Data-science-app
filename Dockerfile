@@ -1,7 +1,6 @@
 FROM php:8.2-fpm
 
-# 1. Install system dependencies
-# Added nodejs and npm to this list
+# 1. Install system dependencies + Docker CLI
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
@@ -12,11 +11,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     zlib1g-dev \
     libicu-dev \
-    python3 \
-    python3-pip \
-    python3-venv \
     nodejs \
     npm \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
+    && apt-get update && apt-get install -y docker-ce-cli \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Install PHP extensions
@@ -29,7 +32,8 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 # 4. Set up the working directory
 WORKDIR /app
 
-# 5. Handle Python dependencies
+# 5. Handle Python dependencies (Optional now, since Python has its own container)
+# You can remove these if you want to save space, but keeping them doesn't hurt.
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt --break-system-packages || true
 
@@ -47,13 +51,12 @@ RUN composer install --no-interaction --prefer-dist --optimize-autoloader || tru
 RUN chmod -R 775 storage bootstrap/cache && \
     chown -R appuser:appuser /app/storage /app/bootstrap/cache
 
+# Fix for home directory permissions
 USER root
 RUN mkdir -p /home/appuser && chown -R appuser:appuser /home/appuser
-# ... then switch back ...
-USER appuser
+
 # 10. Switch to the non-root user
-USER appuser
+USER root
 
 EXPOSE 9000
-
 CMD ["php-fpm"]

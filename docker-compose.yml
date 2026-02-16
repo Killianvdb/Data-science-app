@@ -56,9 +56,9 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
     volumes:
       - ./:/app
-      - app_storage:/app/storage
-      - app_bootstrap:/app/bootstrap/cache
-      - ./storage/app/python_data:/app/python_shared_data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./storage/app/private:/app/python_shared_data
+      
     networks:
       - datasci_net
     depends_on:
@@ -79,6 +79,7 @@ services:
       - ./python_scripts:/app/python_scripts:ro
       - shared_data:/app/data
       - ./storage/app/python_data:/app/python_shared_data
+      - ./storage/app/private:/app/python_shared_data
     networks:
       - datasci_net
     # This keeps the container running so Laravel can "exec" into it
