@@ -1,145 +1,194 @@
 <?php
-
+ 
 namespace App\Services;
-
+ 
 use Symfony\Component\Process\Process;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-
+use Illuminate\Support\Facades\Auth;
+ 
 class DataCleaningService
 {
-    protected $pythonPath;
-    protected $scriptPath;
-
+    protected string $pythonPath;
+    protected string $scriptPath;
+ 
     public function __construct()
     {
-        // Auto-detect Python path or use config
-        $this->pythonPath = config('services.python.path', 'python3');
+        $this->pythonPath = $this->detectPythonPath();
         $this->scriptPath = base_path('python_scripts/data_cleaner.py');
+ 
+        if (!file_exists($this->scriptPath)) {
+            throw new \RuntimeException("Python script not found: {$this->scriptPath}");
+        }
+ 
+        Log::info('DataCleaningService initialized', [
+            'python' => $this->pythonPath,
+            'script' => $this->scriptPath,
+        ]);
     }
-
-    /**
-     * Clean a single file
-     *
-     * @param string $inputPath Full path to input file
-     * @param string $outputPath Full path where cleaned CSV should be saved
-     * @param array $options Optional cleaning parameters
-     * @return array Result with status, message, and metadata
-     */
-    public function cleanFile($inputPath, $outputPath, array $options = [])
+ 
+    private function detectPythonPath(): string
     {
-        // Validate input file exists
+        // 1) Optional config override (als je ooit services.php gebruikt)
+        $configured = config('services.python.path');
+        if (is_string($configured) && $configured !== '' && file_exists($configured)) {
+            return $configured;
+        }
+ 
+        // 2) Project venv candidates (Linux/macOS)
+        $candidates = [
+            base_path('venv/bin/python3'),
+            base_path('venv/bin/python'),
+            // 3) Windows venv candidate
+            base_path('venv/Scripts/python.exe'),
+        ];
+ 
+        foreach ($candidates as $path) {
+            if (file_exists($path)) {
+                return $path;
+            }
+        }
+ 
+        // 4) Fallback to PATH
+        return 'python3';
+    }
+ 
+    /**
+     * Clean a single file (absolute paths)
+     */
+    public function cleanFile(string $inputPath, string $outputPath, array $options = []): array
+    {
         if (!file_exists($inputPath)) {
             throw new \Exception("Input file not found: {$inputPath}");
         }
-
-        // Ensure output directory exists
+ 
         $outputDir = dirname($outputPath);
         if (!is_dir($outputDir)) {
             mkdir($outputDir, 0755, true);
         }
-
-        // Build command
+ 
         $command = [
             $this->pythonPath,
             $this->scriptPath,
             $inputPath,
-            $outputPath
+            $outputPath,
         ];
-
-        // Add options as JSON if provided
+ 
         if (!empty($options)) {
-            $command[] = json_encode($options);
+            $command[] = json_encode($options, JSON_UNESCAPED_UNICODE);
         }
-
-        // Create and run process
+ 
+        Log::info('Running python cleaner', [
+            'cmd' => $command,
+        ]);
+ 
         $process = new Process($command);
-        $process->setTimeout(3600); // 1 hour timeout for large files
-        
+        $process->setTimeout(3600);
+        $process->setWorkingDirectory(base_path());
+ 
         try {
             $process->mustRun();
-            
-            $output = $process->getOutput();
-            $result = json_decode($output, true);
-            
+ 
+            $stdout = trim($process->getOutput());
+            $stderr = trim($process->getErrorOutput());
+ 
+            // Soms print python extra logs -> probeer JSON te “extracten”
+            $result = json_decode($stdout, true);
             if (!$result) {
-                throw new \Exception("Failed to parse Python script output");
+                // probeer laatste JSON blok te vinden
+                $json = $this->extractJson($stdout);
+                $result = $json ? json_decode($json, true) : null;
             }
-
+ 
+            if (!$result) {
+                throw new \Exception("Failed to parse Python output. STDOUT: {$stdout} STDERR: {$stderr}");
+            }
+ 
             Log::info('Data cleaning completed', $result);
-            
+ 
             return $result;
-
-        } catch (ProcessFailedException $exception) {
-            $error = $process->getErrorOutput();
+ 
+        } catch (ProcessFailedException $e) {
+            $error = trim($process->getErrorOutput());
+            if ($error === '') {
+                $error = $e->getMessage();
+            }
+ 
             Log::error('Data cleaning failed', [
                 'error' => $error,
                 'input' => $inputPath,
-                'output' => $outputPath
+                'output' => $outputPath,
             ]);
-            
+ 
             throw new \Exception("Data cleaning failed: " . $error);
         }
     }
-
-    /**
-     * Clean an uploaded file from Laravel storage
-     *
-     * @param string $storagePath Path in storage/app (e.g., 'uploads/file.xlsx')
-     * @param array $options Optional cleaning parameters
-     * @return array Result including the path to cleaned file
-     */
-    public function cleanUploadedFile($storagePath, array $options = [])
+ 
+    private function extractJson(string $text): ?string
     {
-        // Use Storage facade to get the real path
-        $disk = Storage::disk('local');
-        
-        // Check if file exists using Storage
-        if (!$disk->exists($storagePath)) {
-            throw new \Exception("File not found in storage: {$storagePath}");
+        $start = strpos($text, '{');
+        $end = strrpos($text, '}');
+        if ($start === false || $end === false || $end <= $start) {
+            return null;
         }
-        
-        // Get the actual filesystem path
-        $inputPath = $disk->path($storagePath);
-        
-        Log::info('Processing file', [
-            'storage_path' => $storagePath,
-            'real_path' => $inputPath,
-            'exists' => file_exists($inputPath)
-        ]);
-        
-        // Generate output filename
-        $pathInfo = pathinfo($storagePath);
-        $outputFilename = $pathInfo['filename'] . '_CLEANED.csv';
-        
-        // Use storage_path for output
-        $outputDir = storage_path('app/cleaned_output');
+        return substr($text, $start, $end - $start + 1);
+    }
+ 
+    /**
+     * Clean uploaded file
+     *
+     * Accepts either:
+     * - storage path like: "data_mission/1/file.csv"
+     * - absolute filesystem path like: "/home/karim/.../storage/app/....csv"
+     */
+    public function cleanUploadedFile(string $pathOrStorage, array $options = []): array
+    {
+        $inputPath = null;
+        $baseNameForOutput = null;
+ 
+        // A) absolute path
+        if (file_exists($pathOrStorage)) {
+            $inputPath = $pathOrStorage;
+            $baseNameForOutput = pathinfo($inputPath, PATHINFO_FILENAME);
+        } else {
+            // B) storage path
+            $disk = Storage::disk('local');
+            if (!$disk->exists($pathOrStorage)) {
+                throw new \Exception("File not found (storage or path): {$pathOrStorage}");
+            }
+            $inputPath = $disk->path($pathOrStorage);
+            $baseNameForOutput = pathinfo($pathOrStorage, PATHINFO_FILENAME);
+        }
+ 
+        $userId = Auth::id() ?? 'shared';
+ 
+        $outputDir = storage_path('app/cleaned_output/' . $userId);
         if (!is_dir($outputDir)) {
             mkdir($outputDir, 0755, true);
         }
-        
-        $outputPath = $outputDir . '/' . $outputFilename;
-
+ 
+        $outputFilename = $baseNameForOutput . '_CLEANED.csv';
+        $outputPath = $outputDir . DIRECTORY_SEPARATOR . $outputFilename;
+ 
+        Log::info('Cleaning file', [
+            'input' => $inputPath,
+            'output' => $outputPath,
+            'user' => $userId,
+        ]);
+ 
         $result = $this->cleanFile($inputPath, $outputPath, $options);
-        
-        // Add storage path to result
-        $result['cleaned_file_path'] = 'cleaned_output/' . $outputFilename;
-        
+ 
+        // voor je controller download()
+        $result['cleaned_file_path'] = 'cleaned_output/' . $userId . '/' . $outputFilename;
+ 
         return $result;
     }
-
-    /**
-     * Process multiple files in batch
-     *
-     * @param array $files Array of storage paths
-     * @param array $options Optional cleaning parameters
-     * @return array Results for each file
-     */
-    public function cleanBatch(array $files, array $options = [])
+ 
+    public function cleanBatch(array $files, array $options = []): array
     {
         $results = [];
-        
+ 
         foreach ($files as $file) {
             try {
                 $results[] = $this->cleanUploadedFile($file, $options);
@@ -151,29 +200,18 @@ class DataCleaningService
                 ];
             }
         }
-        
+ 
         return $results;
     }
-
-    /**
-     * Get list of supported file formats
-     *
-     * @return array
-     */
-    public function getSupportedFormats()
+ 
+    public function getSupportedFormats(): array
     {
         return ['xlsx', 'xls', 'csv', 'txt', 'json', 'xml'];
     }
-
-    /**
-     * Validate if file format is supported
-     *
-     * @param string $filename
-     * @return bool
-     */
-    public function isFormatSupported($filename)
+ 
+    public function isFormatSupported(string $filename): bool
     {
         $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-        return in_array($extension, $this->getSupportedFormats());
+        return in_array($extension, $this->getSupportedFormats(), true);
     }
 }
