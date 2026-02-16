@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Auth;
 
 
 class DatasetController extends Controller
@@ -27,9 +28,10 @@ class DatasetController extends Controller
     public function index()
     {
         $supportedFormats = $this->cleaningService->getSupportedFormats();
+        $datasets = Dataset::where('user_id', Auth::id())->get();
         return view('datasets.index', compact('supportedFormats'));
     }
-    
+
 
     /**
      * Handle file upload and cleaning
@@ -48,9 +50,11 @@ class DatasetController extends Controller
 
         try {
             $file = $request->file('file');
-            
+
             // 2. Store the file with a hashed name (Security)
-            $storagePath = $file->store('data_mission');
+            //$storagePath = $file->store('data_mission');
+            $storagePath = $file->store('data_mission/' . Auth::id());
+
 
             // 3. Build the options array to pass to Python
             $options = [
@@ -96,7 +100,9 @@ class DatasetController extends Controller
      */
     public function download(Request $request, $filename)
     {
-        $path = storage_path('app/cleaned_output/' . $filename);
+        //$path = storage_path('app/cleaned_output/' . $filename);
+        $path = storage_path('app/cleaned_output/' . Auth::id() . '/' . $filename);
+
         $alias = $request->route('alias') ?? 'cleaned_data.csv';
 
         if (!file_exists($path)) {
@@ -167,8 +173,10 @@ class DatasetController extends Controller
      */
     public function listCleaned()
     {
-        $files = Storage::files('cleaned_output');
-        
+        //$files = Storage::files('cleaned_output');
+        $files = Storage::files('cleaned_output/' . Auth::id());
+
+
         $fileList = array_map(function($file) {
             return [
                 'name' => basename($file),
@@ -187,9 +195,15 @@ class DatasetController extends Controller
 public function showFiles()
 {
     // Try reading directly from the filesystem instead
-    $path = storage_path('app/cleaned_output');
+    //$path = storage_path('app/cleaned_output');
+    $path = storage_path('app/cleaned_output/' . Auth::id());
+
+    if (!is_dir($path)) {
+        mkdir($path, 0755, true);
+    }
+
     $files = File::files($path); // Use File facade instead of Storage
-    
+
     $fileList = array_map(function($file) {
         return [
             'name' => $file->getFilename(),

@@ -1,33 +1,20 @@
 FROM python:3.11-slim
 
-# Install system dependencies including PostgreSQL client
-RUN apt-get update && apt-get install -y --no-install-recommends \
+WORKDIR /app
+
+# Install build tools for C-based extensions (like parts of pandas/numpy)
+RUN apt-get update && apt-get install -y \
     build-essential \
-    curl \
-    postgresql-client \
-    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security
-RUN groupadd -g 1000 datauser && \
-    useradd -r -u 1000 -g datauser datauser
-
-WORKDIR /app/python_scripts
-
-# Copy requirements
+# Copy the requirements file from your project root into the container
 COPY requirements.txt .
 
-# Install Python dependencies (add psycopg2 for PostgreSQL)
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir psycopg2-binary redis flask
+# Install the actual libraries
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY --chown=datauser:datauser python_scripts/ .
-
-# Switch to non-root user
+# Create the user
+RUN useradd -m datauser
 USER datauser
 
-EXPOSE 5000
-
-# Just start a shell or tail a file to keep the container from exiting
 CMD ["tail", "-f", "/dev/null"]
