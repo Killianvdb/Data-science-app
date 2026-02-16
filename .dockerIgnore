@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log
+docker
+.git
+.gitignore
+README.md
+.editorconfig
+.env
+.env.local
+storage/logs/*
+storage/framework/sessions/*
+storage/framework/cache/*
+storage/framework/views/*
+bootstrap/cache/*
+vendor
+.vscode
+.idea
