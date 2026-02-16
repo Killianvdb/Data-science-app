@@ -31,18 +31,18 @@
 
 
             <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
-                <input type="text" x-model="search" @input.debounce.300ms="fetchUsers()"
+                <input type="text" x-model="search" @input.debounce.300ms="page = 1; fetchUsers()"
                     placeholder="Search by ID, name or email..."
                     class="w-full sm:w-auto flex-1 border rounded px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
 
                 <div class="flex gap-2 mt-2 sm:mt-0">
-                    <button @click="roleFilter=''; fetchUsers()"
+                    <button @click="roleFilter=''; page = 1; fetchUsers()"
                         :class="roleFilter===''?'bg-blue-500 text-white':'bg-gray-200 text-gray-800'"
                         class="px-3 py-1 rounded">All</button>
-                    <button @click="roleFilter='admin'; fetchUsers()"
+                    <button @click="roleFilter='admin'; page = 1; fetchUsers()"
                         :class="roleFilter==='admin'?'bg-blue-500 text-white':'bg-gray-200 text-gray-800'"
                         class="px-3 py-1 rounded">Admins</button>
-                    <button @click="roleFilter='user'; fetchUsers()"
+                    <button @click="roleFilter='user'; page = 1; fetchUsers()"
                         :class="roleFilter==='user'?'bg-blue-500 text-white':'bg-gray-200 text-gray-800'"
                         class="px-3 py-1 rounded">Users</button>
                 </div>
@@ -93,9 +93,20 @@
                 </table>
             </div>
 
+
+            <div class="flex justify-between mt-4">
+                <button :disabled="page === 1" @click="page--; fetchUsers()"
+                    class="px-3 py-1 bg-gray-200 rounded disabled:opacity-50">Previous</button>
+
+                <span>Page <span x-text="page"></span> of <span x-text="lastPage"></span></span>
+
+                <button :disabled="page === lastPage" @click="page++; fetchUsers()"
+                    class="px-3 py-1 bg-gray-200 rounded disabled:opacity-50">Next</button>
+            </div>
+
+
+
         </div>
-
-
 
 
         </div>
@@ -110,6 +121,7 @@
             sortField: 'id',
             sortAsc: true,
             page: 1,
+            lastPage: 1,
 
             async init() {
                 await this.fetchUsers();
@@ -126,6 +138,10 @@
                 let res = await fetch(`/admin/users/search?${params.toString()}`);
                 let data = await res.json();
                 this.users = data.data;
+
+                this.page = data.current_page;
+                this.lastPage = data.last_page;
+
             },
 
             async sort(field) {
@@ -154,13 +170,13 @@
                     let data = await res.json();
 
                     if(data.success){
-                        user.role = data.role; // actualiza el valor en la tabla
-                        alert(data.success);   // mensaje al usuario
+                        user.role = data.role;
+                        alert(data.success);
                     } else {
                         alert(data.error || 'Error updating role');
-                        await this.fetchUsers(); // recarga tabla si hubo error
+                        await this.fetchUsers();
                     }
-                    
+
                 }catch(e){
                     alert('Error updating role');
                     await this.fetchUsers();
