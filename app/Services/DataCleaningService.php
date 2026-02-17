@@ -15,11 +15,10 @@ class DataCleaningService
 
     public function __construct()
     {
-        // The path INSIDE the Python container
-        $this->scriptPath = '/app/python_scripts/data_cleaner.py';
-        $this->containerName = 'datasci-python';
-
-        Log::info('DataCleaningService initialized for Docker environment');
+        // Auto-detect Python path or use config
+        //$this->pythonPath = config('services.python.path', 'python3');
+        $this->pythonPath = base_path('venv/Scripts/python.exe');
+        $this->scriptPath = base_path('python_scripts/data_cleaner.py');
     }
 
     /**
@@ -41,6 +40,10 @@ class DataCleaningService
             $pythonOutput
         ];
 
+        //temporary
+        Log::info('Python used for cleaning', ['python' => $this->pythonPath]);
+
+        // Add options as JSON if provided
         if (!empty($options)) {
             $command[] = json_encode($options, JSON_UNESCAPED_UNICODE);
         }
@@ -48,15 +51,14 @@ class DataCleaningService
         Log::info('Running python cleaner via Docker', ['cmd' => implode(' ', $command)]);
 
         $process = new Process($command);
-        $process->setTimeout(3600);
+        $process->setTimeout(3600); // 1 hour timeout for large files
 
         try {
             $process->mustRun();
 
-            $stdout = trim($process->getOutput());
-            
-            // Extract JSON from potential logs
-            $result = json_decode($stdout, true);
+            $output = $process->getOutput();
+            $result = json_decode($output, true);
+
             if (!$result) {
                 $json = $this->extractJson($stdout);
                 $result = $json ? json_decode($json, true) : null;
@@ -66,23 +68,59 @@ class DataCleaningService
                 throw new \Exception("Failed to parse Python output. STDOUT: {$stdout}");
             }
 
+            Log::info('Data cleaning completed', $result);
+
             return $result;
 
-        } catch (ProcessFailedException $e) {
-            $error = trim($process->getErrorOutput()) ?: $e->getMessage();
-            Log::error('Data cleaning failed', ['error' => $error]);
+        } catch (ProcessFailedException $exception) {
+            $error = $process->getErrorOutput();
+            Log::error('Data cleaning failed', [
+                'error' => $error,
+                'input' => $inputPath,
+                'output' => $outputPath
+            ]);
+
             throw new \Exception("Data cleaning failed: " . $error);
         }
     }
 
     private function extractJson(string $text): ?string
     {
-        $start = strpos($text, '{');
-        $end = strrpos($text, '}');
-        if ($start === false || $end === false || $end <= $start) {
-            return null;
+        // Use Storage facade to get the real path
+        $disk = Storage::disk('local');
+
+        // Check if file exists using Storage
+        if (!$disk->exists($storagePath)) {
+            throw new \Exception("File not found in storage: {$storagePath}");
         }
-        return substr($text, $start, $end - $start + 1);
+
+        // Get the actual filesystem path
+        $inputPath = $disk->path($storagePath);
+
+        Log::info('Processing file', [
+            'storage_path' => $storagePath,
+            'real_path' => $inputPath,
+            'exists' => file_exists($inputPath)
+        ]);
+
+        // Generate output filename
+        $pathInfo = pathinfo($storagePath);
+        $outputFilename = $pathInfo['filename'] . '_CLEANED.csv';
+
+        // Use storage_path for output
+        $outputDir = storage_path('app/cleaned_output');
+        if (!is_dir($outputDir)) {
+            mkdir($outputDir, 0755, true);
+        }
+
+        $outputPath = $outputDir . '/' . $outputFilename;
+
+        $result = $this->cleanFile($inputPath, $outputPath, $options);
+
+        // Add storage path to result
+        $result['cleaned_file_path'] = 'cleaned_output/' . $outputFilename;
+
+        return $result;
     }
 
     /**
