@@ -40,6 +40,10 @@
                     <x-nav-link :href="route('contact')" :active="request()->routeIs('contact')">
                         {{ __('Contact Us') }}
                     </x-nav-link>
+
+                    <x-nav-link :href="route('visualise.index')" :active="request()->routeIs('visualise.index')">
+                        {{ __('Visualise') }}
+                    </x-nav-link>
                 </div>
             </div>
 
