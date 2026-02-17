@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\UploadController;
+use App\Http\Controllers\VisualizationController;
 use App\Http\Controllers\DatasetController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\UserController;
