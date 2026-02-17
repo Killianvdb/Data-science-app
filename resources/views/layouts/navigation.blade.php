@@ -41,9 +41,12 @@
                         {{ __('Contact Us') }}
                     </x-nav-link>
 
-                    <x-nav-link :href="route('visualise.index')" :active="request()->routeIs('visualise.index')">
-                        {{ __('Visualise') }}
+                    @if(auth()->check() && auth()->user()->role === 'admin')
+                    <x-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.index')">
+                        {{ __('Admin Panel') }}
                     </x-nav-link>
+                    @endif
+                    
                 </div>
             </div>
 

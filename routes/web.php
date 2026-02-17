@@ -6,6 +6,7 @@ use App\Http\Controllers\UploadController;
 use App\Http\Controllers\VisualizationController;
 use App\Http\Controllers\DatasetController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\UserController;
 
 /*
 |--------------------------------------------------------------------------
@@ -55,11 +56,20 @@ Route::middleware('auth')->group(function () {
         Route::get('/download/{filename}/{alias?}', [DatasetController::class, 'download'])->name('download');
     });
 
-        // for the visualisation
-    Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
-    Route::post('/visualise', [VisualizationController::class, 'generate'])->name('visualise.generate');
 
-    Route::get('/report/{id}', [VisualizationController::class, 'show'])->name('visualise.show');
+/*
+|--------------------------------------------------------------------------
+| Admin Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function(){
+    Route::get('users', [UserController::class,'index'])->name('users.index');
+    Route::patch('users/{user}/role', [UserController::class,'updateRole'])->name('users.updateRole');
+    Route::delete('users/{user}', [UserController::class,'destroy'])->name('users.destroy');
+    Route::get('users/search', [UserController::class,'search'])->name('users.search');
+});
+
 
 });
 
