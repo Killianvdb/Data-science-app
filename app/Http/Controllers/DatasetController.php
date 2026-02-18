@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Dataset;
+use App\Models\User;
 use App\Services\DataCleaningService;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -40,7 +41,7 @@ class DatasetController extends Controller
     {
         // 1. Validate the input
         $request->validate([
-            'file' => 'required|file|mimes:xlsx,xls,csv,txt,json,xml|max:20480', // 20MB limit
+            //'file' => 'required|file|mimes:xlsx,xls,csv,txt,json,xml|max:20480', // 20MB limit
             'row_threshold' => 'nullable|numeric|min:0|max:1',
             'col_threshold' => 'nullable|numeric|min:0|max:1',
             'imputation_type' => 'nullable|string|in:RDF,KNN,mean,median,most_frequent',
@@ -50,6 +51,26 @@ class DatasetController extends Controller
 
         try {
             $file = $request->file('file');
+
+            /** @var \App\Models\User $user */
+            $user = Auth::user();
+            $plan = $user->plan;
+
+            $maxSizeBytes = $plan->max_file_size_mb * 1024 * 1024;
+
+            if ($file->getSize() > $maxSizeBytes) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'File exceeds maximum size for your plan.'
+                ], 403);
+            }
+
+            if (!$user->canUpload(1)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Monthly limit reached. Please upgrade your plan.'
+                ], 403);
+            }
 
             // 2. Store the file with a hashed name (Security)
             //$storagePath = $file->store('data_mission');
@@ -76,6 +97,9 @@ class DatasetController extends Controller
 
             // 4. Run the cleaning service
             $result = $this->cleaningService->cleanUploadedFile($storagePath, $options);
+
+
+            User::where('id', $user->id)->increment('files_used_this_month', 1);
 
             // 5. Return success with the download URL
             return response()->json([
@@ -118,27 +142,82 @@ class DatasetController extends Controller
      */
     public function batchUpload(Request $request)
     {
+
+    //dd($request->all(), $request->file('files'));
+
         $validator = Validator::make($request->all(), [
-            'files.*' => [
-                'required',
-                'file',
-                'max:51200',
-            ],
+            'files' => 'required|array|min:1',
+            'files.*' => 'required|file|max:51200',
+            'row_threshold' => 'nullable|numeric|min:0|max:1',
+            'col_threshold' => 'nullable|numeric|min:0|max:1',
+            'imputation_type' => 'nullable|string|in:RDF,KNN,mean,median,most_frequent',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => 'error',
+                'message' => 'Validation error',
                 'errors' => $validator->errors()
             ], 422);
         }
 
         try {
             $storagePaths = [];
-            foreach ($request->file('files') as $file) {
-                if ($this->cleaningService->isFormatSupported($file->getClientOriginalName())) {
-                    $storagePaths[] = $file->store('data_mission');
+
+            /** @var \App\Models\User $user */
+            $user = Auth::user();
+            $plan = $user->plan;
+
+            if (!$request->hasFile('files')) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No files uploaded.'
+                ], 400);
+            }
+
+            $files = $request->file('files');
+
+
+            if (count($files) > $plan->max_files_per_transaction) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Too many files for your current plan.'
+                ], 403);
+            }
+
+            if (!$user->canUpload(count($files))) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Monthly limit reached. Please upgrade your plan.'
+                ], 403);
+            }
+
+            foreach ($files as $file) {
+                if ($file->getSize() > $plan->max_file_size_mb * 1024 * 1024) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'One or more files exceed maximum size for your plan.'
+                    ], 403);
                 }
+            }
+
+            $invalidFiles = [];
+
+            foreach ($files as $file) {
+                if (!$this->cleaningService->isFormatSupported($file->getClientOriginalName())) {
+                    $invalidFiles[] = $file->getClientOriginalName();
+                    continue;
+                }
+
+                $storagePaths[] = $file->store('data_mission/' . Auth::id());
+            }
+
+            if (!empty($invalidFiles)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Some files have unsupported formats.',
+                    'invalid_files' => $invalidFiles
+                ], 422);
             }
 
             $options = [];
@@ -153,6 +232,9 @@ class DatasetController extends Controller
             }
 
             $results = $this->cleaningService->cleanBatch($storagePaths, $options);
+
+
+            User::where('id', $user->id)->increment('files_used_this_month', count($files));
 
             return response()->json([
                 'status' => 'success',
@@ -192,30 +274,31 @@ class DatasetController extends Controller
         ]);
     }
 
-public function showFiles()
-{
-    // Try reading directly from the filesystem instead
-    //$path = storage_path('app/cleaned_output');
-    $path = storage_path('app/cleaned_output/' . Auth::id());
+    public function showFiles()
+    {
+        // Try reading directly from the filesystem instead
+        //$path = storage_path('app/cleaned_output');
+        $path = storage_path('app/cleaned_output/' . Auth::id());
 
-    if (!is_dir($path)) {
-        mkdir($path, 0755, true);
+        if (!is_dir($path)) {
+            mkdir($path, 0755, true);
+        }
+
+        $files = File::files($path); // Use File facade instead of Storage
+
+        $fileList = array_map(function($file) {
+            return [
+                'name' => $file->getFilename(),
+                'size' => round($file->getSize() / 1024, 2) . ' KB',
+                'modified' => \Carbon\Carbon::createFromTimestamp($file->getMTime())->diffForHumans(),
+                'download_url' => route('datasets.download', [
+                    'filename' => $file->getFilename(),
+                    'alias' => basename($file)
+                ])
+            ];
+        }, $files);
+
+        return view('datasets.files', compact('fileList'));
     }
 
-    $files = File::files($path); // Use File facade instead of Storage
-
-    $fileList = array_map(function($file) {
-        return [
-            'name' => $file->getFilename(),
-            'size' => round($file->getSize() / 1024, 2) . ' KB',
-            'modified' => \Carbon\Carbon::createFromTimestamp($file->getMTime())->diffForHumans(),
-            'download_url' => route('datasets.download', [
-                'filename' => $file->getFilename(),
-                'alias' => basename($file)
-            ])
-        ];
-    }, $files);
-
-    return view('datasets.files', compact('fileList'));
-}
 }
