@@ -24,6 +24,7 @@ Route::get('/how-it-works', fn() => view('how-it-works'))->name('how-it-works');
 Route::get('/contact', fn() => view('contact'))->name('contact');
 Route::post('/contact', [ContactController::class, 'submit'])->name('contact.submit');
 
+
 /*
 |--------------------------------------------------------------------------
 | Authenticated Routes
@@ -31,6 +32,11 @@ Route::post('/contact', [ContactController::class, 'submit'])->name('contact.sub
 */
 
 Route::middleware('auth')->group(function () {
+
+// Visualization Routes
+    Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
+    Route::post('/visualise/generate', [VisualizationController::class, 'generate'])->name('visualise.generate');
+    Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show'); // Added this!
 
     // Profile Management
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
