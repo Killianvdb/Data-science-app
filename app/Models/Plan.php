@@ -13,7 +13,7 @@ class Plan extends Model
         'name',
         'price',
         'monthly_limit',
-        'max_file_size_mb',
+        'max_total_mb_per_transaction',
         'max_files_per_transaction'
     ];
 

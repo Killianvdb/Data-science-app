@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('slug')->unique()->after('id');
             $table->integer('price');
             $table->integer('monthly_limit')->nullable();
-            $table->integer('max_file_size_mb');
+            $table->integer('max_total_mb_per_transaction');
             $table->integer('max_files_per_transaction');
             $table->timestamps();
         });
