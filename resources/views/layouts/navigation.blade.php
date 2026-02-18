@@ -20,6 +20,10 @@
                             {{ __('Clean My Data') }}
                         </x-nav-link>
 
+                        <x-nav-link :href="route('visualise.index')" :active="request()->routeIs('visualise.*')">
+                            {{ __('Visualisation') }}
+                        </x-nav-link>
+
                         <x-nav-link :href="route('datasets.files')" :active="request()->routeIs('datasets.files')">
                             {{ __('My Datasets') }}
                         </x-nav-link>

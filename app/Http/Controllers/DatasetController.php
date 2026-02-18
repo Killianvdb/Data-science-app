@@ -98,20 +98,19 @@ class DatasetController extends Controller
     /**
      * Download cleaned file
      */
-    public function download(Request $request, $filename)
-    {
-        //$path = storage_path('app/cleaned_output/' . $filename);
-        $path = storage_path('app/cleaned_output/' . Auth::id() . '/' . $filename);
+   public function download(Request $request, $filename)
+{
+    $userId = Auth::id() ?? 'shared';
+    
+    // 2. Point to the SAME private folder here
+    $path = storage_path('app/private/cleaned/' . $userId . '/' . $filename);
 
-        $alias = $request->route('alias') ?? 'cleaned_data.csv';
-
-        if (!file_exists($path)) {
-            abort(404, 'File not found');
-        }
-
-        // The second argument in download() is the name the user actually sees
-        return response()->download($path, $alias);
+    if (!file_exists($path)) {
+        abort(404, 'File not found at: ' . $path);
     }
+
+    return response()->download($path);
+}       
 
     /**
      * Handle batch upload
@@ -194,15 +193,17 @@ class DatasetController extends Controller
 
 public function showFiles()
 {
-    // Try reading directly from the filesystem instead
-    //$path = storage_path('app/cleaned_output');
-    $path = storage_path('app/cleaned_output/' . Auth::id());
+    $userId = Auth::id() ?? 'shared';
+    
+    // 1. Point to the PRIVATE folder where Docker saves the results
+    $path = storage_path('app/private/cleaned/' . $userId);
 
+    // Create the directory if it doesn't exist to prevent errors
     if (!is_dir($path)) {
-        mkdir($path, 0755, true);
+        File::makeDirectory($path, 0777, true, true);
     }
 
-    $files = File::files($path); // Use File facade instead of Storage
+    $files = File::files($path);
 
     $fileList = array_map(function($file) {
         return [
@@ -210,8 +211,7 @@ public function showFiles()
             'size' => round($file->getSize() / 1024, 2) . ' KB',
             'modified' => \Carbon\Carbon::createFromTimestamp($file->getMTime())->diffForHumans(),
             'download_url' => route('datasets.download', [
-                'filename' => $file->getFilename(),
-                'alias' => basename($file)
+                'filename' => $file->getFilename()
             ])
         ];
     }, $files);
