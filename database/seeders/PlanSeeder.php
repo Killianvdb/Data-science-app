@@ -21,7 +21,7 @@ class PlanSeeder extends Seeder
                 'name' => 'Free',
                 'price' => 0,
                 'monthly_limit' => 10,
-                'max_file_size_mb' => 2,
+                'max_total_mb_per_transaction' => 2,
                 'max_files_per_transaction' => 2,
             ]
         );
@@ -32,7 +32,7 @@ class PlanSeeder extends Seeder
                 'name' => 'Medium',
                 'price' => 1000,
                 'monthly_limit' => 50,
-                'max_file_size_mb' => 10,
+                'max_total_mb_per_transaction' => 10,
                 'max_files_per_transaction' => 5,
             ]
         );
@@ -43,7 +43,7 @@ class PlanSeeder extends Seeder
                 'name' => 'Pro',
                 'price' => 2500,
                 'monthly_limit' => 1000,
-                'max_file_size_mb' => 20,
+                'max_total_mb_per_transaction' => 20,
                 'max_files_per_transaction' => 10,
             ]
         );

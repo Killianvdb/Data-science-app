@@ -30,7 +30,10 @@ class DatasetController extends Controller
     {
         $supportedFormats = $this->cleaningService->getSupportedFormats();
         $datasets = Dataset::where('user_id', Auth::id())->get();
-        return view('datasets.index', compact('supportedFormats'));
+
+        $planSlug = Auth::user()->plan?->slug;
+
+        return view('datasets.index', compact('supportedFormats', 'planSlug'));
     }
 
 
@@ -56,19 +59,33 @@ class DatasetController extends Controller
             $user = Auth::user();
             $plan = $user->plan;
 
-            $maxSizeBytes = $plan->max_file_size_mb * 1024 * 1024;
 
-            if ($file->getSize() > $maxSizeBytes) {
+            if (!$plan) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'File exceeds maximum size for your plan.'
+                    'message' => 'No subscription plan found for this user.'
                 ], 403);
             }
+
+
+            $maxTotalBytes = $plan->max_total_mb_per_transaction * 1024 * 1024;
+
+            $isPro = $user->plan?->slug === 'pro';
+
+            if ($file->getSize() > $maxTotalBytes) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $isPro ? 'This file exceeds the current Pro max size (20MB). Contact support if you need a higher limit.'
+                    : 'File exceeds maximum size for your plan.'
+                ], 403);
+            }
+
 
             if (!$user->canUpload(1)) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Monthly limit reached. Please upgrade your plan.'
+                    'message' => $isPro ? 'You reached our fair-use security limit. Please contact support to increase it.'
+                     : 'Monthly limit reached. Please upgrade your plan.'
                 ], 403);
             }
 
@@ -122,6 +139,7 @@ class DatasetController extends Controller
     /**
      * Download cleaned file
      */
+
     public function download(Request $request, $filename)
     {
         //$path = storage_path('app/cleaned_output/' . $filename);
@@ -177,28 +195,40 @@ class DatasetController extends Controller
 
             $files = $request->file('files');
 
+            $isPro = $user->plan?->slug === 'pro';
+
 
             if (count($files) > $plan->max_files_per_transaction) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Too many files for your current plan.'
+                    'message' => $isPro ? 'You reached the Pro batch limit (10 files per upload). Contact support for enterprise limits.'
+                    : 'Too many files for your current plan.'
                 ], 403);
             }
+
 
             if (!$user->canUpload(count($files))) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Monthly limit reached. Please upgrade your plan.'
+                    'message' => $isPro ? 'You reached our fair-use security limit. Please contact support to increase it.'
+                     : 'Monthly limit reached. Please upgrade your plan.'
                 ], 403);
             }
 
+            $totalBytes = 0;
             foreach ($files as $file) {
-                if ($file->getSize() > $plan->max_file_size_mb * 1024 * 1024) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'One or more files exceed maximum size for your plan.'
-                    ], 403);
-                }
+                $totalBytes += $file->getSize();
+            }
+
+            $maxTotalBytes = $plan->max_total_mb_per_transaction * 1024 * 1024;
+
+            if ($totalBytes > $maxTotalBytes) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $isPro
+                    ? 'You reached the Pro upload size limit. Contact support for higher limits.'
+                    : 'Total upload size exceeds the maximum allowed for your plan.'
+                ], 403);
             }
 
             $invalidFiles = [];
@@ -238,14 +268,14 @@ class DatasetController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Batch processing completed',
+                'message' => 'Your data has been processed',
                 'results' => $results
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Batch processing failed: ' . $e->getMessage()
+                'message' => 'We could not process your files: ' . $e->getMessage()
             ], 500);
         }
     }

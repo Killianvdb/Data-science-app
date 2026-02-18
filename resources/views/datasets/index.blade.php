@@ -215,14 +215,28 @@
                     const msg = result.message || 'Request failed';
 
                     if (response.status === 403) {
+
+                        const isPro = userPlan === 'pro';
+
+                        const actionButton = isPro
+                        ? `
+                            <a href="{{ route('contact') }}"
+                            class="inline-block bg-gray-900 hover:bg-gray-800 text-white font-semibold py-2 px-5 rounded-lg transition">
+                            Contact Us
+                            </a>
+                        `
+                        : `
+                            <a href="{{ route('pricing') }}"
+                            class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-5 rounded-lg transition">
+                            Upgrade Plan
+                            </a>
+                        `;
+
                         resultDiv.innerHTML = `
                             <div class="bg-red-50 p-6 rounded-lg text-red-700">
                                 <strong>Error:</strong> ${msg}
                                 <div class="mt-4 flex justify-center">
-                                    <a href="{{ route('pricing') }}"
-                                    class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-5 rounded-lg transition">
-                                        Upgrade Plan
-                                    </a>
+                                    ${actionButton}
                                 </div>
                             </div>
                         `;
@@ -240,8 +254,8 @@
 
                 resultDiv.innerHTML = `
                     <div class="bg-green-50 border border-green-200 rounded-lg p-6">
-                        <h3 class="text-lg font-semibold text-green-800 mb-2">Batch Complete!</h3>
-                        <p class="text-green-700 mb-4">${result.message || 'Batch processing completed'}</p>
+                        <h3 class="text-lg font-semibold text-green-800 mb-2">Upload Completed!</h3>
+                        <p class="text-green-700 mb-4">${result.message || 'Operation completed'}</p>
                         <div class="bg-white rounded p-4 text-sm shadow-sm border border-green-100">
                             <p><strong>Success:</strong> ${okCount} | <strong>Errors:</strong> ${errCount}</p>
                         </div>
@@ -275,6 +289,8 @@
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
         const fileList = document.getElementById('fileList');
+
+        const userPlan = "{{ $planSlug }}";
 
         let dt = new DataTransfer();
 
