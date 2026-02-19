@@ -1,296 +1,515 @@
+#!/usr/bin/env python3
+"""
+DATA CLEANER - Version 3.0
+===========================
+Rôle : Nettoyage de base uniquement (sanitize)
+- Suppression doublons / lignes-colonnes vides
+- Détection et conversion des types (dates, prix, numériques)
+- Correction des formats (DD/MM vs MM/DD, symboles monétaires)
+- Valeurs négatives impossibles → valeur absolue
+NE PAS : imputer, enrichir, valider règles métier (→ cross_reference.py)
+"""
 import os
 import sys
 import json
-import re
+import csv
 import pandas as pd
 import numpy as np
-from sklearn.base import TransformerMixin
-from sklearn.ensemble import RandomForestRegressor
-# This line is essential to enable the IterativeImputer
-from sklearn.experimental import enable_iterative_imputer  
-from sklearn.impute import SimpleImputer, KNNImputer, IterativeImputer
 import warnings
 warnings.filterwarnings('ignore')
 
-class prepross(TransformerMixin):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+# ============================================================================
+# GROQ LLM CLIENT (pour détection de types uniquement)
+# ============================================================================
 
-    def fit(self, X, y=None):
-        # Fills categorical with mode, numerical with mean
-        self.fill = {}
-        for c in X.columns:
-            try:
-                # Try to convert to numeric first
-                numeric_col = pd.to_numeric(X[c], errors='coerce')
-                if numeric_col.notna().sum() > 0:
-                    # If we have any valid numbers, treat as numeric
-                    self.fill[c] = numeric_col.mean()
-                else:
-                    # Otherwise treat as categorical
-                    if not X[c].empty and X[c].notna().any():
-                        self.fill[c] = X[c].value_counts().index[0]
-                    else:
-                        self.fill[c] = None
-            except:
-                # Fallback: use mode for any problematic columns
-                if not X[c].empty and X[c].notna().any():
-                    self.fill[c] = X[c].value_counts().index[0]
-                else:
-                    self.fill[c] = None
-        return self
-
-    def transform(self, X, y=None):
-        return X.fillna(self.fill)
-
-def rm_rows_cols(df, row_thresh=0.8, col_thresh=0.8):
-    if "Index" in df.columns:
-        df = df.drop("Index", axis=1)
-    df.columns = [col.strip() for col in df.columns]
-    df = df.drop_duplicates()
+class GroqLLM:
+    """Client Groq pour détection intelligente des types de colonnes"""
     
-    # Drop completely empty rows/cols first
+    def __init__(self):
+        self.available = False
+        self.model = None
+        
+        try:
+            from groq import Groq
+            
+            api_key = os.environ.get("GROQ_API_KEY")
+            if not api_key:
+                print("⚠️  GROQ_API_KEY not defined (type detection without LLM)", file=sys.stderr)
+                return
+            
+            self.client = Groq(api_key=api_key)
+            
+            try:
+                self.client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": "test"}],
+                    max_tokens=5
+                )
+                self.model = "llama-3.3-70b-versatile"
+                self.available = True
+                print("✅ Groq LLM initialized (Llama 3.3 70B)", file=sys.stderr)
+            except:
+                try:
+                    self.client.chat.completions.create(
+                        model="llama-3.1-8b-instant",
+                        messages=[{"role": "user", "content": "test"}],
+                        max_tokens=5
+                    )
+                    self.model = "llama-3.1-8b-instant"
+                    self.available = True
+                    print("✅ Groq LLM initialized (Llama 3.1 8B)", file=sys.stderr)
+                except Exception as e:
+                    print(f"⚠️  Groq LLM not available: {e}", file=sys.stderr)
+        
+        except ImportError:
+            print("⚠️  Package 'groq' not installed (pip install groq)", file=sys.stderr)
+    
+    def detect_column_types(self, profile):
+        """Détecte les types de colonnes (date, numérique, catégoriel, etc.)"""
+        
+        if not self.available:
+            return None
+        
+        prompt = f"""Analyze this dataset profile and classify each column type.
+
+Dataset profile:
+{json.dumps(profile, indent=2)}
+
+For EACH column, respond with a JSON object containing:
+- is_date: boolean (is this a date/time column?)
+- can_be_negative: boolean (can this column have negative values? only for numeric)
+- reason: brief explanation
+
+IMPORTANT RULES:
+1. Date columns: is_date=true
+2. Negative values:
+   - can_be_negative=false for: prices, costs, ages, distances, quantities (physical counts)
+   - can_be_negative=true for: temperatures, balances, profits, returns/refunds
+
+Respond with ONLY valid JSON (no markdown, no explanations):
+{{
+  "column_name": {{
+    "is_date": true/false,
+    "can_be_negative": true/false,
+    "reason": "..."
+  }}
+}}"""
+
+        try:
+            print("🤖 Groq LLM consultation for type detection...", file=sys.stderr)
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                max_tokens=1500,
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            print(f"✅ Types detected for {len(result)} columns", file=sys.stderr)
+            return result
+            
+        except Exception as e:
+            print(f"⚠️  LLM error: {e}", file=sys.stderr)
+            return None
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def is_date_column(series):
+    """Détecte si une colonne contient des dates"""
+    date_keywords = ['date', 'day', 'time', 'birthday', 'timestamp', 'created', 'updated', 'birth']
+    col_name_lower = series.name.lower() if series.name else ''
+    
+    if any(keyword in col_name_lower for keyword in date_keywords):
+        return True
+    
+    if series.dtype == 'object':
+        sample = series.dropna().head(100).astype(str)
+        if len(sample) == 0:
+            return False
+        date_pattern_count = sample.str.contains(r'\d{1,4}[/-]\d{1,2}[/-]\d{1,4}', regex=True).sum()
+        if date_pattern_count > len(sample) * 0.5:
+            return True
+    
+    return False
+
+def create_dataset_profile(df):
+    """Crée un profil compact du dataset pour le LLM"""
+    profile = {
+        "total_rows": len(df),
+        "total_columns": len(df.columns),
+        "columns": {}
+    }
+    
+    for col in df.columns:
+        col_info = {
+            "dtype": str(df[col].dtype),
+            "null_count": int(df[col].isna().sum()),
+            "null_percentage": float(df[col].isna().sum() / len(df) * 100) if len(df) > 0 else 0,
+            "unique_count": int(df[col].nunique())
+        }
+        
+        if pd.api.types.is_numeric_dtype(df[col]):
+            non_null = df[col].dropna()
+            if len(non_null) > 0:
+                col_info.update({
+                    "min": float(non_null.min()),
+                    "max": float(non_null.max()),
+                    "mean": float(non_null.mean()),
+                    "negative_count": int((non_null < 0).sum()),
+                })
+        
+        col_info["sample_values"] = df[col].dropna().head(5).tolist()
+        profile["columns"][col] = col_info
+    
+    return profile
+
+def create_fallback_type_decisions(df):
+    """Détection de types de base si LLM non disponible"""
+    decisions = {}
+    
+    for col in df.columns:
+        is_date = is_date_column(df[col])
+        decisions[col] = {
+            "is_date": is_date,
+            "can_be_negative": True,
+            "reason": "Fallback rule (LLM unavailable)"
+        }
+    
+    return decisions
+
+# ============================================================================
+# CLEANING FUNCTIONS
+# ============================================================================
+
+def clean_basic(df, row_thresh=0.5, col_thresh=0.3):
+    """Nettoyage de base : doublons, lignes/colonnes vides"""
+    
+    print("\n📋 Basic cleaning...", file=sys.stderr)
+    
+    # Supprimer colonnes/lignes complètement vides
     df = df.dropna(axis=0, how='all').dropna(axis=1, how='all')
     
-    # Threshold based dropping
+    # Supprimer doublons
+    before = len(df)
+    df = df.drop_duplicates()
+    if len(df) < before:
+        print(f"   🗑️  {before - len(df)} duplicates removed", file=sys.stderr)
+    
+    # Supprimer lignes avec trop de NULL
+    before = len(df)
     df = df.dropna(axis=0, thresh=int(len(df.columns) * row_thresh))
+    if len(df) < before:
+        print(f"   🗑️  {before - len(df)} rows removed (<50% data)", file=sys.stderr)
+    
+    # Supprimer colonnes avec trop de NULL
+    before_cols = len(df.columns)
     df = df.dropna(axis=1, thresh=int(len(df) * col_thresh))
-    return df.infer_objects()
-
-def replace_special_character(df, usr_char=None, do=None, ignore_col=None):
-    spec_chars = ["!", '"', "#", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", 
-                  "<", "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`", "{", "|", "}", "~", 
-                  "–", "//", "%*", ":/", ".;", "Ø", "§", '$', "£"]
+    if len(df.columns) < before_cols:
+        print(f"   🗑️  {before_cols - len(df.columns)} columns removed (>70% NULL)", file=sys.stderr)
     
-    if ignore_col is None: ignore_col = []
-    if usr_char is None: usr_char = []
-
-    if do == 'remove':
-        spec_chars = [c for c in spec_chars if c not in usr_char]
-    elif do == 'add':
-        spec_chars.extend(usr_char)
-
-    cols_to_fix = [c for c in df.columns if c not in ignore_col]
-    pattern = "[" + re.escape("".join(spec_chars)) + "]"
-    
-    # Only apply to string columns to avoid errors
-    for col in cols_to_fix:
-        if df[col].dtype == 'object' or df[col].dtype == 'string':
-            df[col] = df[col].astype(str).replace(pattern, '', regex=True)
     return df
 
-def custom_imputation(df, imputation_type="RDF"):
-    # Make a copy to avoid warnings
-    df = df.copy()
+def clean_dates(df, decisions):
+    """
+    Convertit les colonnes dates avec détection automatique du format.
+    Les NULL restants sont laissés tels quels (pas d'imputation).
+    """
+    date_columns = {}
     
-    # Convert columns intelligently
+    for col, decision in decisions.items():
+        if col not in df.columns:
+            continue
+        
+        if decision.get('is_date'):
+            print(f"   📅 Date: {col}", file=sys.stderr)
+            
+            sample = df[col].dropna().head(100)
+            if len(sample) == 0:
+                print(f"      ⚠️  Empty column, ignored", file=sys.stderr)
+                continue
+            
+            formats_to_test = [
+                ('%Y-%m-%d', 'YYYY-MM-DD'),
+                ('%d/%m/%Y', 'DD/MM/YYYY'),
+                ('%m/%d/%Y', 'MM/DD/YYYY'),
+                ('%Y/%m/%d', 'YYYY/MM/DD'),
+                ('%d-%m-%Y', 'DD-MM-YYYY'),
+                (None, 'Auto (pandas)'),
+            ]
+            
+            best_format = None
+            best_success_rate = 0
+            best_name = 'Auto'
+            
+            for fmt, name in formats_to_test:
+                try:
+                    if fmt is None:
+                        test_result = pd.to_datetime(sample, errors='coerce')
+                    else:
+                        test_result = pd.to_datetime(sample, format=fmt, errors='coerce')
+                    success_rate = test_result.notna().sum() / len(sample)
+                except:
+                    success_rate = 0
+                
+                if success_rate > best_success_rate:
+                    best_success_rate = success_rate
+                    best_format = fmt
+                    best_name = name
+            
+            print(f"      Selected format: {best_name} ({best_success_rate*100:.1f}% succes)", file=sys.stderr)
+            
+            if best_format is None:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+            else:
+                df[col] = pd.to_datetime(df[col], format=best_format, errors='coerce')
+            
+            failed = df[col].isna().sum()
+            if failed > 0:
+                print(f"      ⚠️ {failed} invalid dates → left NULL (imputation in cross_reference)", file=sys.stderr)
+            
+            if df[col].notna().sum() > 0:
+                date_columns[col] = df[col].copy()
+                df = df.drop(columns=[col])
+            else:
+                print(f"      ❌ Total failure, column ignored", file=sys.stderr)
+    
+    return df, date_columns
+
+def clean_prices(df):
+    """
+    Conversion robuste des colonnes monétaires.
+    25,50 → 25.50 / 1 200€ → 1200 / $30.00 → 30.00
+    """
+    price_keywords = [
+        'price', 'cost', 'amount', 'value',
+        'salary', 'revenue', 'total',
+        'usd', 'eur', 'gbp', 'fee', 'charge'
+    ]
+
     for col in df.columns:
-        try:
-            # Try to convert to numeric
-            numeric_version = pd.to_numeric(df[col], errors='coerce')
-            if numeric_version.notna().sum() > len(df) * 0.5:  # If more than 50% are valid numbers
-                df[col] = numeric_version
-        except:
-            pass
-    
-    # Now identify column types
-    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
-    categorical_columns = [col for col in df.columns if col not in numeric_columns]
+        col_lower = col.lower()
 
-    data_numeric = df[numeric_columns].copy() if numeric_columns else pd.DataFrame()
-    data_categorical = df[categorical_columns].copy() if categorical_columns else pd.DataFrame()
+        if any(keyword in col_lower for keyword in price_keywords):
+            print(f"   💵 Price detected: {col}", file=sys.stderr)
 
-    # Handle Categorical
-    if not data_categorical.empty:
-        try:
-            data_categorical = pd.DataFrame(
-                prepross().fit_transform(data_categorical), 
-                columns=data_categorical.columns,
-                index=data_categorical.index
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace(r'[€$£¥₹]', '', regex=True)
+                .str.replace(r'\s', '', regex=True)
+                .str.replace(',', '.', regex=False)
             )
-        except Exception as e:
-            print(f"Warning: Categorical imputation issue: {e}", file=sys.stderr)
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    return df
+
+def handle_negatives(df, decisions):
+    """
+    Corrige les valeurs négatives incorrectes → valeur absolue.
+    Ne remplace PAS par NULL.
+    """
+    always_positive_keywords = [
+        'salary', 'wage', 'income', 'revenue', 'earnings',
+        'price', 'cost', 'amount', 'fee', 'charge',
+        'age', 'years', 'old',
+        'distance', 'length', 'width', 'height', 'weight',
+        'count', 'quantity', 'qty', 'number', 'total'
+    ]
     
-    if data_numeric.empty:
-        return data_categorical if not data_categorical.empty else df
-
-    # Handle Numerical with Modern Imputers
-    try:
-        if imputation_type == "KNN":
-            imp = KNNImputer(n_neighbors=5)
-        elif imputation_type == "RDF":
-            imp = IterativeImputer(
-                estimator=RandomForestRegressor(n_estimators=100, n_jobs=-1),
-                max_iter=10, 
-                random_state=42
-            )
-        else:  # mean, median, most_frequent
-            imp = SimpleImputer(strategy=imputation_type)
-
-        data_numeric_final = pd.DataFrame(
-            imp.fit_transform(data_numeric), 
-            columns=data_numeric.columns,
-            index=data_numeric.index
-        )
-    except Exception as e:
-        print(f"Warning: Numeric imputation issue: {e}, falling back to mean", file=sys.stderr)
-        data_numeric_final = data_numeric.fillna(data_numeric.mean())
+    for col, decision in decisions.items():
+        if col not in df.columns:
+            continue
+        
+        if not pd.api.types.is_numeric_dtype(df[col]):
+            continue
+        
+        llm_says_no_negative = decision.get('can_be_negative') is False
+        col_lower = col.lower()
+        forced_positive = any(keyword in col_lower for keyword in always_positive_keywords)
+        
+        if llm_says_no_negative or forced_positive:
+            neg_count = (df[col] < 0).sum()
+            if neg_count > 0:
+                reason = "LLM" if llm_says_no_negative else "forced rule"
+                print(f"   ⚠️  {col}: {neg_count} negatives → absolute value ({reason})", file=sys.stderr)
+                df.loc[df[col] < 0, col] = df.loc[df[col] < 0, col].abs()
     
-    # Combine results
-    if not data_categorical.empty:
-        return pd.concat([data_numeric_final, data_categorical], axis=1)
-    else:
-        return data_numeric_final
+    return df
 
-class DataCleaning():
-    def __init__(self, file_path, separator=",", row_threshold=0.8, col_threshold=0.8, 
-                 special_character=None, action=None, ignore_columns=None, imputation_type="RDF"):
+# ============================================================================
+# MAIN CLEANER CLASS
+# ============================================================================
+
+class DataCleaner:
+    """
+    Data cleaner - sanitize only.
+    Imputation, enrichment and business validation
+    are delegated to cross_reference.py
+    """
+    
+    def __init__(self, file_path, use_llm=True, row_threshold=0.5, col_threshold=0.3):
         self.file_path = file_path
-        self.df = self._load_file(file_path, separator)
+        self.use_llm = use_llm
         self.row_threshold = row_threshold
         self.col_threshold = col_threshold
-        self.special_character = special_character
-        self.action = action
-        self.ignore_columns = ignore_columns if ignore_columns else []
-        self.imputation_type = imputation_type
-
-    def _load_file(self, path, sep):
+        self.df = self._load_file(file_path)
+    
+    def _load_file(self, path):
+        """Charge un fichier (CSV, Excel, JSON, XML)"""
         ext = os.path.splitext(path)[-1].lower()
+        
         try:
             if ext in ['.xlsx', '.xls']:
                 sheets = pd.read_excel(path, sheet_name=None)
                 return pd.concat(sheets.values(), ignore_index=True)
+            
             elif ext == '.json':
                 with open(path, 'r') as f:
                     return pd.json_normalize(json.load(f))
+            
             elif ext == '.xml':
                 return pd.read_xml(path)
+            
             elif ext in ['.txt', '.csv']:
-                # Try to auto-detect separator
-                try:
-                    return pd.read_csv(path, sep=None, engine='python', on_bad_lines='skip')
-                except:
-                    return pd.read_csv(path, sep=sep, on_bad_lines='skip')
+                encodings = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252', 'utf-16']
+                
+                for encoding in encodings:
+                    try:
+                        df = pd.read_csv(path, sep=None, engine='python',
+                                       encoding=encoding, on_bad_lines='skip')
+                        print(f"✅ Chargé avec encoding: {encoding}", file=sys.stderr)
+                        return df
+                    except UnicodeDecodeError:
+                        continue
+                    except Exception:
+                        try:
+                            df = pd.read_csv(path, encoding=encoding, on_bad_lines='skip')
+                            print(f"✅ Load with encoding: {encoding}", file=sys.stderr)
+                            return df
+                        except:
+                            continue
+                
+                raise ValueError("Impossible de lire le fichier avec tous les encodings testés")
+            
             else:
-                raise ValueError(f"Unsupported format: {ext}")
-        except Exception as e:
-            raise ValueError(f"Error loading file: {str(e)}")
-
-    def start_cleaning(self):
-        try:
-            df = rm_rows_cols(self.df, self.row_threshold, self.col_threshold)
-            df = replace_special_character(df, self.special_character, self.action, self.ignore_columns)
-            df = custom_imputation(df, self.imputation_type)
-            return df
-        except Exception as e:
-            raise Exception(f"Cleaning failed: {str(e)}")
-
-# --- Process single file (for Laravel integration) ---
-def process_single_file(input_file, output_file, options=None):
-    """
-    Process a single file with optional cleaning parameters
-    
-    Args:
-        input_file: Path to input file
-        output_file: Path to save cleaned CSV
-        options: Dict with optional parameters
-    """
-    if options is None:
-        options = {}
-    
-    try:
-        cleaner = DataCleaning(
-            input_file,
-            row_threshold=options.get('row_threshold', 0.8),
-            col_threshold=options.get('col_threshold', 0.8),
-            special_character=options.get('special_character'),
-            action=options.get('action'),
-            ignore_columns=options.get('ignore_columns'),
-            imputation_type=options.get('imputation_type', 'RDF')
-        )
-        clean_df = cleaner.start_cleaning()
-        clean_df.to_csv(output_file, index=False)
+                raise ValueError(f"Format non supporté: {ext}")
         
-        result = {
-            'status': 'success',
-            'input_file': input_file,
-            'output_file': output_file,
-            'rows': len(clean_df),
-            'columns': len(clean_df.columns),
-            'message': f'Successfully cleaned {os.path.basename(input_file)}'
-        }
-        print(json.dumps(result))
-        return result
-        
-    except Exception as e:
-        error_result = {
-            'status': 'error',
-            'message': str(e)
-        }
-        print(json.dumps(error_result))
-        sys.exit(1)
-
-# --- Batch Processing Function ---
-def process_all_files(input_folder, output_folder):
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    files = [f for f in os.listdir(input_folder) if os.path.isfile(os.path.join(input_folder, f))]
-    results = []
-    
-    for file in files:
-        full_path = os.path.join(input_folder, file)
-        try:
-            cleaner = DataCleaning(full_path)
-            clean_df = cleaner.start_cleaning()
-            
-            name_part, ext_part = os.path.splitext(file)
-            ext_label = ext_part.replace('.', '')
-            output_filename = f"{name_part}_{ext_label}_CLEANED.csv"
-            
-            output_path = os.path.join(output_folder, output_filename)
-            clean_df.to_csv(output_path, index=False)
-            print(f"✅ Saved to: {output_path}")
-            
-            results.append({
-                'file': file,
-                'status': 'success',
-                'output': output_filename
-            })
-            
         except Exception as e:
-            print(f"❌ Failed to process {file}: {e}")
-            results.append({
-                'file': file,
-                'status': 'error',
-                'message': str(e)
-            })
+            raise ValueError(f"Erreur chargement: {str(e)}")
     
-    return results
+    def clean(self):
+        """
+        Pipeline de nettoyage (sanitize uniquement) :
+        1. Nettoyage de base (doublons, vides)
+        2. Détection des types via LLM
+        3. Conversion des dates
+        4. Conversion des prix
+        5. Correction des négatifs
+        
+        ❌ PAS d'imputation des NULL
+        ❌ PAS de recalcul de colonnes dérivées
+        ❌ PAS de validation des règles métier
+        """
+        
+        print(f"\n{'='*60}", file=sys.stderr)
+        print(f"📂 {os.path.basename(self.file_path)}", file=sys.stderr)
+        print(f"{'='*60}", file=sys.stderr)
+        print(f"Rows: {len(self.df)}, Columns: {len(self.df.columns)}", file=sys.stderr)
+        
+        # 1. Nettoyage de base
+        self.df = clean_basic(self.df, self.row_threshold, self.col_threshold)
+        
+        # 2. Créer profil pour LLM
+        print("\n📊 Analysis of column types...", file=sys.stderr)
+        profile = create_dataset_profile(self.df)
+        
+        # 3. Détecter les types via LLM
+        if self.use_llm:
+            llm = GroqLLM()
+            decisions = llm.detect_column_types(profile)
+            if not decisions:
+                print("📋 Using fallback rules...", file=sys.stderr)
+                decisions = create_fallback_type_decisions(self.df)
+        else:
+            decisions = create_fallback_type_decisions(self.df)
+        
+        # 4. Convertir les dates
+        print(f"\n🔧 Type conversion...", file=sys.stderr)
+        self.df, date_columns = clean_dates(self.df, decisions)
+        
+        # 5. Convertir les prix
+        self.df = clean_prices(self.df)
+        
+        # 6. Corriger les négatifs
+        self.df = handle_negatives(self.df, decisions)
+        
+        # 7. Réintégrer les dates (format ISO)
+        for col, date_series in date_columns.items():
+            self.df[col] = date_series.dt.strftime('%Y-%m-%d')
+            print(f"   ✅ Date re-integrated: {col}", file=sys.stderr)
+        
+        # Résumé des NULL restants (pour info, pas d'action)
+        null_summary = self.df.isna().sum()
+        null_cols = null_summary[null_summary > 0]
+        if len(null_cols) > 0:
+            print(f"\n📊 Remaining NULL values (to be processed in cross_reference.py):", file=sys.stderr)
+            for col, count in null_cols.items():
+                pct = count / len(self.df) * 100
+                print(f"   • {col}: {count} ({pct:.1f}%)", file=sys.stderr)
+        
+        print(f"\n✅ Sanitize finished: {len(self.df)} lines, {len(self.df.columns)} columns", file=sys.stderr)
+        
+        return self.df
 
-if __name__ == "__main__":
-    # Check if running as CLI with arguments (for Laravel)
+# ============================================================================
+# CLI INTERFACE
+# ============================================================================
+
+def main():
     if len(sys.argv) >= 3:
         input_file = sys.argv[1]
         output_file = sys.argv[2]
         
-        # Optional: Parse JSON options if provided
-        options = {}
+        use_llm = True
         if len(sys.argv) >= 4:
             try:
                 options = json.loads(sys.argv[3])
+                use_llm = options.get('use_llm', True)
             except:
                 pass
         
-        process_single_file(input_file, output_file, options)
+        try:
+            cleaner = DataCleaner(input_file, use_llm=use_llm)
+            df_clean = cleaner.clean()
+            
+            df_clean.to_csv(output_file, index=False, quoting=csv.QUOTE_MINIMAL)
+            
+            result = {
+                'status': 'success',
+                'input_file': input_file,
+                'output_file': output_file,
+                'rows': len(df_clean),
+                'columns': len(df_clean.columns),
+                'null_remaining': int(df_clean.isna().sum().sum()),
+                'message': f'Sanitize terminé: {os.path.basename(input_file)}'
+            }
+            print(json.dumps(result))
+            
+        except Exception as e:
+            result = {
+                'status': 'error',
+                'message': str(e)
+            }
+            print(json.dumps(result))
+            sys.exit(1)
     
-    # Otherwise run batch mode
     else:
-        input_dir = "data_mission"
-        output_dir = "cleaned_output"
         
-        if os.path.exists(input_dir):
-            results = process_all_files(input_dir, output_dir)
-            print(f"\n🎉 Processed {len(results)} files! Check the 'cleaned_output' folder.")
-        else:
-            print(f"Folder '{input_dir}' not found. Please create it and add your files!")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
