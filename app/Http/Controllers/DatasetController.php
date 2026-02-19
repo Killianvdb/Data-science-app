@@ -140,20 +140,21 @@ class DatasetController extends Controller
      * Download cleaned file
      */
 
-    public function download(Request $request, $filename)
-    {
-        //$path = storage_path('app/cleaned_output/' . $filename);
-        $path = storage_path('app/cleaned_output/' . Auth::id() . '/' . $filename);
+   public function download(Request $request, $filename)
+{
+    $userId = Auth::id() ?? 'shared';
+    
+    // 2. Point to the SAME private folder here
+    $path = storage_path('app/private/cleaned/' . $userId . '/' . $filename);
+     
+      $alias = $request->route('alias') ?? 'cleaned_data.csv';
 
-        $alias = $request->route('alias') ?? 'cleaned_data.csv';
-
-        if (!file_exists($path)) {
-            abort(404, 'File not found');
-        }
-
-        // The second argument in download() is the name the user actually sees
-        return response()->download($path, $alias);
+    if (!file_exists($path)) {
+        abort(404, 'File not found at: ' . $path);
     }
+
+    return response()->download($path);
+}       
 
     /**
      * Handle batch upload
@@ -308,7 +309,7 @@ class DatasetController extends Controller
     {
         // Try reading directly from the filesystem instead
         //$path = storage_path('app/cleaned_output');
-        $path = storage_path('app/cleaned_output/' . Auth::id());
+        $path = storage_path('app/cleaned/' . Auth::id());
 
         if (!is_dir($path)) {
             mkdir($path, 0755, true);
