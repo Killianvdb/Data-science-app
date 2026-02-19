@@ -15,3 +15,30 @@ bootstrap/cache/*
 vendor
 .vscode
 .idea
+
+# Python venv (Windows)
+venv/
+.venv/
+
+# Node / builds
+node_modules/
+public/build/
+dist/
+
+# Laravel / caches / logs
+storage/logs/
+storage/framework/cache/
+storage/framework/sessions/
+storage/framework/views/
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+**/venv/
+**/.venv/
+
