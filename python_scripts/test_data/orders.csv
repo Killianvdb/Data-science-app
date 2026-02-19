@@ -1,0 +1,204 @@
+OrderID,CustomerID,CustomerName,Product,Category,Quantity,UnitPrice,TotalAmount,OrderDate,DeliveryDate,Status
+ORD-00001,CUST-0011,Jack Jones,Headphones Pro,Electronics,4.0,199.99,799.96,2024-09-08,2024-09-22,Delivered
+ORD-00002,CUST-0036,Jack Garcia,Office Chair,,8.0,299.99,2399.92,2024-02-22,2024-02-24,Shipped
+ORD-00003,CUST-0012,Alice Davis,Standing Desk,Furniture,3.0,599.99,1799.97,2024-01-07,2024-01-15,Shipped
+ORD-00004,CUST-0020,Bob Brown,Webcam HD,Electronics,2.0,79.99,159.98,2024-10-20,2024-10-22,Cancelled
+ORD-00005,CUST-0034,Grace Jones,Pen Pack x10,Stationery,12.0,8.99,107.88,2024-05-25,2024-06-05,Delivered
+ORD-00006,CUST-0015,Iris Jones,Desk Lamp,Office,6.0,39.99,239.94,28/08/2024,2024-08-27,Pending
+ORD-00007,CUST-0016,Jack Garcia,Headphones Pro,Electronics,2.0,199.99,399.98,2024-09-02,2024-09-05,Shipped
+ORD-00008,CUST-0038,Grace Davis,Notebook A5,Stationery,1.0,4.99,4.99,2024-08-13,2024-08-21,Shipped
+ORD-00009,CUST-0004,Alice Williams,Webcam HD,Electronics,12.0,79.99,959.8799999999999,2024-06-23,2024-07-05,Shipped
+ORD-00010,CUST-0023,Frank Williams,Wireless Mouse,Accessories,12.0,29.99,359.88,2024-04-04,2024-04-09,Delivered
+ORD-00011,CUST-0050,Jack Johnson,Wireless Mouse,Accessories,17.0,-29.99,-509.83,2024-01-27,2024-02-05,Pending
+ORD-00012,CUST-0050,Jack Johnson,Office Chair,Furniture,10.0,299.99,2999.9,2024-05-09,2024-05-21,Delivered
+ORD-00013,CUST-0004,Alice Williams,Notebook A5,,16.0,4.99,79.84,01/09/2024,2024-09-06,Shipped
+ORD-00014,CUST-0011,Jack Jones,Webcam HD,,15.0,79.99,1199.85,28/02/2024,2024-03-06,Pending
+ORD-00015,CUST-0014,Grace Johnson,Office Chair,Furniture,15.0,299.99,4499.85,2024-02-03,2024-02-17,Delivered
+ORD-00016,CUST-0047,Bob Smith,Mechanical Keyboard,Accessories,19.0,89.99,1709.81,2024-07-24,2024-08-01,Delivered
+ORD-00017,CUST-0045,Diana Williams,Laptop Air 13,,12.0,999.99,11999.880000000001,2024-09-08,2024-09-16,Cancelled
+ORD-00018,CUST-0044,Grace Garcia,Mechanical Keyboard,,3.0,89.99,269.96999999999997,2024-02-07,2024-02-11,Cancelled
+ORD-00019,CUST-0019,,Mechanical Keyboard,Accessories,5.0,89.99,604.0691563059487,2024-10-22,2024-10-30,Delivered
+ORD-00020,CUST-0008,Bob Johnson,Mechanical Keyboard,,19.0,89.99,1709.81,2024-11-18,2024-11-27,Delivered
+ORD-00021,CUST-0042,,Desk Lamp,,7.0,39.99,279.93,2024-12-17,2024-12-20,Cancelled
+ORD-00022,CUST-0036,Jack Garcia,MacBook Pro,Electronics,9.0,-1899.99,-17099.91,2024-01-28,2024-02-04,Delivered
+ORD-00023,CUST-0031,Diana Garcia,Wireless Mouse,Accessories,7.0,29.99,209.92999999999998,2024-03-18,2024-03-22,Shipped
+ORD-00024,CUST-0050,Jack Johnson,Standing Desk,Furniture,18.0,599.99,10799.82,2024-03-17,2024-03-27,Delivered
+ORD-00025,CUST-0033,Alice Garcia,Standing Desk,Furniture,,599.99,2399.96,2024-10-15,2024-10-24,Shipped
+ORD-00026,CUST-0001,Iris Miller,Laptop Pro 15,Electronics,14.0,1299.99,18199.86,2024-06-04,2024-06-16,Pending
+ORD-00027,CUST-0041,Iris Wilson,Monitor 27inch,Electronics,18.0,399.99,7199.82,2024-02-13,2024-02-16,Shipped
+ORD-00028,CUST-0015,Iris Jones,Desk Lamp,Office,9.0,39.99,359.91,2024-05-07,2024-05-21,Delivered
+ORD-00029,CUST-0034,Grace Jones,Monitor 27inch,Electronics,2.0,399.99,799.98,2024-03-01,2024-03-03,Delivered
+ORD-00030,CUST-0047,Bob Smith,Wireless Mouse,Accessories,15.0,29.99,449.84999999999997,2024-10-12,2024-10-17,Delivered
+ORD-00031,CUST-0007,Diana Garcia,Monitor 27inch,Electronics,,399.99,2799.9300000000003,2024-08-01,2024-08-14,Pending
+ORD-00032,CUST-0006,Eve Williams,Headphones Pro,Electronics,12.0,199.99,2399.88,2024-11-06,2024-11-19,Pending
+ORD-00033,CUST-0006,Eve Williams,Desk Lamp,Office,8.0,39.99,319.92,2024-11-01,2024-10-31,Delivered
+ORD-00034,CUST-0028,,Standing Desk,,15.0,599.99,8999.85,2024-11-12,2024-11-19,Pending
+ORD-00035,CUST-0014,Grace Johnson,Pen Pack x10,Stationery,3.0,8.99,26.97,2024-04-25,2024-05-01,Delivered
+ORD-00036,CUST-0031,,Notebook A5,Stationery,14.0,4.99,69.86,2024-09-24,2024-10-07,Pending
+ORD-00037,CUST-0036,Jack Garcia,USB-C Hub,Accessories,17.0,49.99,849.83,2024-07-13,2024-07-22,Shipped
+ORD-00038,CUST-0011,Jack Jones,Laptop Pro 15,Electronics,4.0,1299.99,5199.96,2024-08-18,2024-08-23,Pending
+ORD-00039,CUST-0032,Alice Brown,USB-C Hub,Accessories,18.0,49.99,899.82,2024-08-14,2024-08-28,Cancelled
+ORD-00040,CUST-0014,Grace Johnson,Notebook A5,Stationery,8.0,-4.99,-39.92,2024-06-01,2024-06-02,Shipped
+ORD-00041,CUST-0025,Diana Jones,Pen Pack x10,Stationery,4.0,8.99,35.96,2024-10-28,2024-11-02,Shipped
+ORD-00042,CUST-0046,Iris Davis,Smartphone X12,Electronics,,799.99,1599.98,2024-08-07,2024-08-19,Shipped
+ORD-00043,CUST-0043,Grace Taylor,Monitor 27inch,Electronics,6.0,399.99,2399.94,2024-06-05,2024-06-10,Delivered
+ORD-00044,CUST-0005,Grace Garcia,Notebook A5,Stationery,10.0,4.99,49.900000000000006,2024-10-18,2024-11-01,Delivered
+ORD-00045,CUST-0022,Eve Davis,Desk Lamp,Office,4.0,39.99,159.96,13/11/2024,2024-11-23,Shipped
+ORD-00046,CUST-0014,,Office Chair,,,299.99,5399.82,2024-01-31,2024-02-10,Delivered
+ORD-00047,CUST-0001,Iris Miller,Wireless Mouse,Accessories,12.0,29.99,483.1479230389706,2024-11-08,2024-11-19,Shipped
+ORD-00048,CUST-0039,,Wireless Mouse,Accessories,2.0,29.99,59.98,2024-02-20,2024-02-28,Pending
+ORD-00049,CUST-0032,Alice Brown,Monitor 27inch,,10.0,399.99,3999.9,2024-04-16,2024-04-30,Cancelled
+ORD-00050,CUST-0014,Grace Johnson,Laptop Pro 15,Electronics,,1299.99,5199.96,2024-11-16,2024-11-19,Cancelled
+ORD-00051,CUST-0038,,USB-C Hub,,14.0,49.99,699.86,2024-04-18,2024-04-26,Cancelled
+ORD-00052,CUST-0028,,Standing Desk,Furniture,16.0,-599.99,-9599.84,2024-05-15,2024-05-14,Shipped
+ORD-00053,CUST-0022,Eve Davis,Monitor 27inch,Electronics,15.0,399.99,5999.85,2024-12-04,2024-12-12,Delivered
+ORD-00054,CUST-0001,Iris Miller,MacBook Pro,Electronics,8.0,1899.99,15199.92,2024-02-11,2024-02-17,Delivered
+ORD-00055,CUST-0004,Alice Williams,Webcam HD,Electronics,14.0,79.99,1119.86,2024-03-21,2024-03-27,Shipped
+ORD-00056,CUST-0045,Diana Williams,Laptop Air 13,,8.0,999.99,7999.92,2024-05-02,2024-05-11,Pending
+ORD-00057,CUST-0046,Iris Davis,Office Chair,Furniture,16.0,299.99,4799.84,2024-03-29,2024-04-11,Delivered
+ORD-00058,CUST-0028,Diana Williams,Laptop Pro 15,Electronics,13.0,1299.99,16899.87,2024-10-09,2024-10-18,Shipped
+ORD-00059,CUST-0042,Eve Taylor,USB-C Hub,Accessories,,49.99,899.82,08/02/2024,2024-02-15,Delivered
+ORD-00060,CUST-0030,Eve Wilson,Desk Lamp,Office,15.0,39.99,599.85,2024-03-21,2024-03-29,Delivered
+ORD-00061,CUST-0008,,Laptop Pro 15,Electronics,,1299.99,16899.87,2024-01-02,2024-01-08,Shipped
+ORD-00062,CUST-0007,Diana Garcia,Office Chair,Furniture,9.0,299.99,2699.91,2024-07-28,2024-08-11,Delivered
+ORD-00063,CUST-0016,Jack Garcia,MacBook Pro,Electronics,15.0,1899.99,28499.85,2024-08-18,2024-08-22,Delivered
+ORD-00064,CUST-0045,Diana Williams,Monitor 27inch,Electronics,13.0,399.99,5199.87,2024-12-18,2024-12-30,Pending
+ORD-00065,CUST-0040,Charlie Brown,Laptop Pro 15,Electronics,1.0,1299.99,1299.99,2024-10-31,2024-11-04,Shipped
+ORD-00066,CUST-0044,Grace Garcia,USB-C Hub,,7.0,49.99,349.93,2024-08-28,2024-09-07,Shipped
+ORD-00067,CUST-0045,Diana Williams,Wireless Mouse,Accessories,9.0,29.99,269.90999999999997,2024-05-29,2024-06-05,Pending
+ORD-00068,CUST-0011,,Mechanical Keyboard,Accessories,1.0,89.99,89.99,2024-01-17,2024-01-21,Shipped
+ORD-00069,CUST-0013,Iris Johnson,Notebook A5,Stationery,12.0,4.99,59.88,2024-04-28,2024-05-12,Delivered
+ORD-00070,CUST-0006,,USB-C Hub,Accessories,8.0,49.99,399.92,2024-05-27,2024-06-09,Shipped
+ORD-00071,CUST-0040,Charlie Brown,Notebook A5,,11.0,4.99,54.89,2024-12-27,2025-01-03,Shipped
+ORD-00072,CUST-0045,Diana Williams,Pen Pack x10,Stationery,19.0,8.99,170.81,2024-05-24,2024-05-25,Delivered
+ORD-00073,CUST-0021,Bob Miller,Wireless Mouse,Accessories,17.0,29.99,509.83,2024-12-25,2024-12-31,Shipped
+ORD-00074,CUST-0032,Alice Brown,Laptop Air 13,,8.0,999.99,7999.92,2024-08-20,2024-09-01,Delivered
+ORD-00075,CUST-0008,Bob Johnson,Laptop Pro 15,Electronics,3.0,1299.99,3899.9700000000003,2024-02-06,2024-02-14,Shipped
+ORD-00076,CUST-0047,Bob Smith,Desk Lamp,Office,3.0,39.99,119.97,17/12/2024,2024-12-29,Delivered
+ORD-00077,CUST-0044,Grace Garcia,Smartphone X12,Electronics,1.0,799.99,799.99,2024-04-29,2024-05-12,Cancelled
+ORD-00078,CUST-0049,Charlie Miller,USB-C Hub,Accessories,5.0,49.99,249.95000000000002,2024-05-15,2024-05-22,Shipped
+ORD-00079,CUST-0041,Iris Wilson,Office Chair,Furniture,10.0,299.99,2999.9,2024-11-16,2024-11-23,Delivered
+ORD-00080,CUST-0045,Diana Williams,Notebook A5,Stationery,7.0,4.99,34.93,2024-10-28,2024-11-08,Delivered
+ORD-00081,CUST-0002,Diana Davis,Office Chair,Furniture,9.0,299.99,2699.91,2024-12-04,2024-12-17,Delivered
+ORD-00082,CUST-0037,,Notebook A5,Stationery,7.0,4.99,34.93,2024-04-11,2024-04-25,Shipped
+ORD-00083,CUST-0017,Jack Brown,Smartphone X12,Electronics,9.0,799.99,7199.91,2024-08-05,2024-08-16,Delivered
+ORD-00084,CUST-0047,,MacBook Pro,Electronics,,1899.99,15199.92,2024-02-28,2024-03-02,Delivered
+ORD-00085,CUST-0041,Iris Wilson,Laptop Pro 15,Electronics,,1299.99,15599.880000000001,05/10/2024,2024-10-13,Pending
+ORD-00086,CUST-0044,Grace Garcia,MacBook Pro,Electronics,2.0,1899.99,3799.98,2024-04-25,2024-04-21,Pending
+ORD-00087,CUST-0041,Iris Wilson,Laptop Air 13,Electronics,1.0,999.99,999.99,2024-11-27,2024-11-30,Pending
+ORD-00088,CUST-0014,,Standing Desk,Furniture,16.0,599.99,9599.84,2024-03-17,2024-03-26,Cancelled
+ORD-00089,CUST-0040,Charlie Brown,Desk Lamp,Office,5.0,39.99,199.95000000000002,2024-05-16,2024-05-26,Pending
+ORD-00090,CUST-0006,Eve Williams,Wireless Mouse,Accessories,3.0,29.99,89.97,2024-03-13,2024-03-12,Shipped
+ORD-00091,CUST-0044,Grace Garcia,Standing Desk,Furniture,12.0,599.99,7199.88,2024-02-06,2024-02-20,Delivered
+ORD-00092,CUST-0043,Grace Taylor,Notebook A5,Stationery,8.0,4.99,39.92,2024-01-31,2024-02-02,Shipped
+ORD-00093,CUST-0012,Alice Davis,MacBook Pro,Electronics,3.0,1899.99,5699.97,2024-03-25,2024-04-08,Shipped
+ORD-00094,CUST-0041,Iris Wilson,Office Chair,Furniture,1.0,299.99,299.99,2024-06-06,2024-06-03,Cancelled
+ORD-00095,CUST-0024,Frank Garcia,Notebook A5,,3.0,4.99,14.97,31/10/2024,2024-11-08,Delivered
+ORD-00096,CUST-0016,Jack Garcia,Laptop Air 13,Electronics,5.0,999.99,4999.95,2024-10-18,2024-10-20,Delivered
+ORD-00097,CUST-0040,Charlie Brown,Pen Pack x10,,15.0,8.99,134.85,2024-05-27,2024-06-05,Delivered
+ORD-00098,CUST-0012,,Smartphone X12,Electronics,14.0,799.99,11199.86,2024-08-12,2024-08-20,Delivered
+ORD-00099,CUST-0002,Diana Davis,Laptop Air 13,Electronics,3.0,999.99,2999.9700000000003,2024-03-04,2024-03-05,Delivered
+ORD-00100,CUST-0010,Frank Garcia,Laptop Pro 15,Electronics,1.0,1299.99,1299.99,27/08/2024,2024-09-08,Delivered
+ORD-00101,CUST-0017,Jack Brown,Mechanical Keyboard,Accessories,5.0,89.99,449.95,2024-12-18,2024-12-21,Delivered
+ORD-00102,CUST-0044,Grace Garcia,Standing Desk,,14.0,599.99,8399.86,2024-06-04,2024-06-11,Delivered
+ORD-00103,CUST-0049,Charlie Miller,Smartphone X12,,7.0,799.99,5599.93,2024-12-24,2025-01-07,Cancelled
+ORD-00104,CUST-0014,Grace Johnson,USB-C Hub,Accessories,9.0,49.99,449.91,2024-07-25,2024-08-05,Shipped
+ORD-00105,CUST-0033,Alice Garcia,Standing Desk,Furniture,15.0,599.99,8999.85,2024-05-19,2024-05-22,Delivered
+ORD-00106,CUST-0020,Bob Brown,Laptop Air 13,,15.0,999.99,14999.85,2024-09-13,2024-09-15,Shipped
+ORD-00107,CUST-0050,Jack Johnson,Standing Desk,Furniture,10.0,599.99,5999.9,2024-10-03,2024-10-11,Shipped
+ORD-00108,CUST-0027,Charlie Wilson,Office Chair,Furniture,13.0,299.99,3899.87,2024-09-09,2024-09-22,Shipped
+ORD-00109,CUST-0047,,Laptop Air 13,Electronics,19.0,999.99,18999.81,2024-08-12,2024-08-17,Shipped
+ORD-00110,CUST-0006,Eve Williams,Notebook A5,Stationery,7.0,4.99,34.93,2024-02-11,2024-02-09,Cancelled
+ORD-00111,CUST-0049,Charlie Miller,Pen Pack x10,,17.0,8.99,152.83,2024-11-02,2024-11-12,Shipped
+ORD-00112,CUST-0009,Grace Johnson,Office Chair,,,299.99,1199.96,21/01/2024,2024-02-02,Cancelled
+ORD-00113,CUST-0049,Charlie Miller,Laptop Air 13,Electronics,5.0,999.99,4999.95,2024-08-09,2024-08-04,Delivered
+ORD-00114,CUST-0014,Grace Johnson,Smartphone X12,Electronics,7.0,799.99,5599.93,2024-06-14,2024-06-25,Pending
+ORD-00115,CUST-0006,Eve Williams,Notebook A5,Stationery,13.0,4.99,64.87,2024-11-05,2024-11-07,Shipped
+ORD-00116,CUST-0022,Eve Davis,USB-C Hub,Accessories,15.0,49.99,749.85,2024-05-08,2024-05-22,Cancelled
+ORD-00117,CUST-0037,Diana Davis,Monitor 27inch,Electronics,11.0,399.99,4399.89,2024-01-14,2024-01-20,Cancelled
+ORD-00118,CUST-0016,Jack Garcia,USB-C Hub,Accessories,4.0,49.99,199.96,2024-02-16,2024-03-01,Delivered
+ORD-00119,CUST-0031,Diana Garcia,Webcam HD,Electronics,13.0,79.99,1039.87,2024-04-27,2024-05-08,Pending
+ORD-00120,CUST-0026,Bob Taylor,USB-C Hub,Accessories,7.0,49.99,349.93,2024-12-11,2024-12-25,Shipped
+ORD-00121,CUST-0020,Bob Brown,Pen Pack x10,Stationery,19.0,8.99,229.31670760888787,2024-10-21,2024-10-30,Delivered
+ORD-00122,CUST-0029,Henry Miller,Pen Pack x10,Stationery,2.0,8.99,17.98,2024-10-27,2024-11-03,Cancelled
+ORD-00123,CUST-0013,Iris Johnson,Laptop Air 13,,10.0,999.99,9999.9,2024-01-11,2024-01-17,Pending
+ORD-00124,CUST-0036,Jack Garcia,Smartphone X12,,13.0,799.99,10399.87,2024-12-10,2024-12-21,Shipped
+ORD-00125,CUST-0001,Iris Miller,Office Chair,Furniture,6.0,299.99,1799.94,2024-05-17,2024-05-29,Cancelled
+ORD-00126,CUST-0047,,Pen Pack x10,Stationery,12.0,8.99,107.88,2024-10-22,2024-11-04,Delivered
+ORD-00127,CUST-0027,,Standing Desk,Furniture,12.0,599.99,7199.88,2024-01-21,2024-01-29,Shipped
+ORD-00128,CUST-0036,Jack Garcia,Monitor 27inch,Electronics,11.0,399.99,4399.89,2024-03-30,2024-04-13,Delivered
+ORD-00129,CUST-0038,Grace Davis,Notebook A5,,7.0,4.99,34.93,2024-08-28,2024-09-06,Delivered
+ORD-00130,CUST-0034,Grace Jones,Smartphone X12,,1.0,799.99,799.99,2024-09-22,2024-09-23,Delivered
+ORD-00131,CUST-0019,Diana Jones,Mechanical Keyboard,Accessories,1.0,89.99,89.99,2024-11-29,2024-12-09,Delivered
+ORD-00132,CUST-0004,Alice Williams,Pen Pack x10,Stationery,13.0,8.99,116.87,2024-08-14,2024-08-16,Shipped
+ORD-00133,CUST-0034,Grace Jones,Desk Lamp,Office,9.0,39.99,359.91,2024-05-22,2024-05-26,Delivered
+ORD-00134,CUST-0017,Jack Brown,Webcam HD,Electronics,3.0,79.99,239.96999999999997,2024-04-02,2024-04-13,Delivered
+ORD-00135,CUST-0016,Jack Garcia,Monitor 27inch,Electronics,7.0,399.99,2799.9300000000003,2024-10-26,2024-11-06,Delivered
+ORD-00136,CUST-0043,Grace Taylor,Standing Desk,Furniture,6.0,599.99,3599.94,2024-08-11,2024-08-16,Shipped
+ORD-00137,CUST-0036,Jack Garcia,Mechanical Keyboard,Accessories,8.0,89.99,719.92,2024-11-21,2024-11-20,Cancelled
+ORD-00138,CUST-0016,Jack Garcia,Pen Pack x10,Stationery,9.0,8.99,80.91,2024-09-08,2024-09-20,Cancelled
+ORD-00139,CUST-0016,Jack Garcia,Pen Pack x10,Stationery,5.0,8.99,44.95,2024-02-16,2024-02-18,Delivered
+ORD-00140,CUST-0021,,Laptop Air 13,Electronics,1.0,999.99,999.99,2024-08-28,2024-09-04,Delivered
+ORD-00141,CUST-0021,Bob Miller,Headphones Pro,Electronics,19.0,199.99,3799.8100000000004,2024-06-27,2024-06-29,Pending
+ORD-00142,CUST-0015,Iris Jones,Wireless Mouse,Accessories,10.0,29.99,299.9,2024-07-28,2024-08-10,Delivered
+ORD-00143,CUST-0007,Diana Garcia,Monitor 27inch,Electronics,12.0,399.99,4799.88,2024-06-19,2024-06-30,Pending
+ORD-00144,CUST-0022,Eve Davis,Office Chair,,15.0,299.99,4499.85,2024-06-13,2024-06-25,Shipped
+ORD-00145,CUST-0048,Bob Williams,USB-C Hub,,9.0,49.99,449.91,2024-12-09,2024-12-23,Delivered
+ORD-00146,CUST-0034,Grace Jones,Laptop Pro 15,,17.0,1299.99,22099.83,2024-02-23,2024-02-25,Delivered
+ORD-00147,CUST-0046,Iris Davis,Pen Pack x10,,,8.99,152.83,2024-03-23,2024-03-31,Pending
+ORD-00148,CUST-0031,Diana Garcia,MacBook Pro,Electronics,12.0,1899.99,22799.88,2024-06-17,2024-06-12,Shipped
+ORD-00149,CUST-0016,Jack Garcia,Wireless Mouse,Accessories,7.0,29.99,209.92999999999998,2024-07-29,2024-08-10,Pending
+ORD-00150,CUST-0028,Diana Williams,Notebook A5,Stationery,2.0,4.99,9.98,2024-12-21,2024-12-26,Shipped
+ORD-00151,CUST-0001,Iris Miller,USB-C Hub,,3.0,49.99,149.97,10/09/2024,2024-09-11,Pending
+ORD-00152,CUST-0015,Iris Jones,Headphones Pro,Electronics,17.0,199.99,3399.83,2024-05-27,2024-05-28,Pending
+ORD-00153,CUST-0022,Eve Davis,Standing Desk,Furniture,5.0,599.99,2999.95,2024-12-05,2024-12-11,Shipped
+ORD-00154,CUST-0029,Henry Miller,Mechanical Keyboard,,17.0,89.99,1529.83,2024-07-24,2024-08-06,Shipped
+ORD-00155,CUST-0033,Alice Garcia,Laptop Pro 15,Electronics,17.0,1299.99,22099.83,2024-10-08,2024-10-09,Delivered
+ORD-00156,CUST-0024,Frank Garcia,Smartphone X12,Electronics,17.0,799.99,13599.83,2024-01-19,2024-01-24,Shipped
+ORD-00157,CUST-0023,Frank Williams,Laptop Air 13,Electronics,2.0,999.99,1999.98,2024-08-20,2024-08-15,Shipped
+ORD-00158,CUST-0011,Jack Jones,Standing Desk,Furniture,2.0,599.99,1199.98,2024-02-15,2024-02-21,Delivered
+ORD-00159,CUST-0024,Frank Garcia,Webcam HD,,5.0,79.99,399.95,2024-06-10,2024-06-17,Delivered
+ORD-00160,CUST-0046,Iris Davis,Notebook A5,Stationery,1.0,4.99,4.99,2024-05-09,2024-05-12,Cancelled
+ORD-00161,CUST-0040,Charlie Brown,Standing Desk,Furniture,1.0,599.99,599.99,14/06/2024,2024-06-18,Delivered
+ORD-00162,CUST-0009,Grace Johnson,Office Chair,Furniture,19.0,299.99,5699.81,2024-02-29,2024-03-09,Shipped
+ORD-00163,CUST-0005,Grace Garcia,Webcam HD,Electronics,2.0,79.99,159.98,2024-07-25,2024-08-01,Delivered
+ORD-00164,CUST-0026,Bob Taylor,Notebook A5,Stationery,12.0,4.99,59.88,2024-09-20,2024-09-30,Pending
+ORD-00165,CUST-0032,Alice Brown,Laptop Air 13,,6.0,999.99,5999.9400000000005,2024-01-01,2024-01-12,Cancelled
+ORD-00166,CUST-0017,Jack Brown,Wireless Mouse,,4.0,29.99,119.96,2024-12-02,2024-12-15,Delivered
+ORD-00167,CUST-0041,Iris Wilson,Standing Desk,Furniture,11.0,599.99,8860.517799782348,2024-10-04,2024-10-07,Shipped
+ORD-00168,CUST-0038,Grace Davis,Mechanical Keyboard,,17.0,89.99,1529.83,2024-08-24,2024-08-27,Pending
+ORD-00169,CUST-0034,,Desk Lamp,Office,6.0,39.99,239.94,2024-07-30,2024-08-02,Delivered
+ORD-00170,CUST-0012,Alice Davis,Webcam HD,Electronics,5.0,79.99,399.95,2024-01-28,2024-01-30,Shipped
+ORD-00171,CUST-0010,Frank Garcia,Webcam HD,Electronics,,79.99,159.98,2024-04-06,2024-04-16,Delivered
+ORD-00172,CUST-0002,Diana Davis,Monitor 27inch,Electronics,6.0,399.99,2399.94,2024-09-22,2024-10-06,Shipped
+ORD-00173,CUST-0013,Iris Johnson,Notebook A5,Stationery,11.0,4.99,54.89,2024-07-04,2024-07-11,Pending
+ORD-00174,CUST-0024,Frank Garcia,Mechanical Keyboard,Accessories,16.0,89.99,1439.84,2024-11-14,2024-11-24,Pending
+ORD-00175,CUST-0043,,Standing Desk,Furniture,16.0,599.99,9599.84,2024-09-12,2024-09-23,Delivered
+ORD-00176,CUST-0004,Alice Williams,Mechanical Keyboard,Accessories,1.0,-89.99,-89.99,2024-11-16,2024-11-20,Delivered
+ORD-00177,CUST-0021,Bob Miller,Wireless Mouse,Accessories,9.0,29.99,269.90999999999997,2024-08-14,2024-08-22,Delivered
+ORD-00178,CUST-0032,Alice Brown,Laptop Air 13,Electronics,6.0,999.99,5999.9400000000005,2024-01-27,2024-02-06,Shipped
+ORD-00179,CUST-0010,Frank Garcia,MacBook Pro,Electronics,16.0,1899.99,30399.84,2024-04-14,2024-04-17,Delivered
+ORD-00180,CUST-0035,Bob Brown,Laptop Air 13,,,999.99,2999.9700000000003,2024-05-16,2024-05-20,Shipped
+ORD-00181,CUST-0025,Diana Jones,Desk Lamp,,4.0,39.99,159.96,2024-10-08,2024-10-16,Delivered
+ORD-00182,CUST-0013,Iris Johnson,Notebook A5,,19.0,4.99,94.81,2024-03-08,2024-03-19,Shipped
+ORD-00183,CUST-0033,Alice Garcia,MacBook Pro,,3.0,1899.99,5699.97,2024-05-27,2024-06-01,Delivered
+ORD-00184,CUST-0001,Iris Miller,Wireless Mouse,,19.0,29.99,569.81,2024-08-12,2024-08-20,Pending
+ORD-00185,CUST-0038,Grace Davis,Webcam HD,Electronics,7.0,79.99,559.93,2024-12-23,2024-12-28,Delivered
+ORD-00186,CUST-0039,Charlie Jones,Standing Desk,,9.0,599.99,5399.91,2024-09-05,2024-09-16,Delivered
+ORD-00187,CUST-0006,Eve Williams,Smartphone X12,Electronics,1.0,799.99,799.99,2024-03-03,2024-03-04,Delivered
+ORD-00188,CUST-0022,Eve Davis,Webcam HD,Electronics,8.0,79.99,639.92,2024-01-15,2024-01-28,Delivered
+ORD-00189,CUST-0009,Grace Johnson,Mechanical Keyboard,,7.0,89.99,629.93,2024-11-18,2024-11-26,Shipped
+ORD-00190,CUST-0048,Bob Williams,Laptop Air 13,Electronics,18.0,999.99,17999.82,2024-11-07,2024-11-12,Delivered
+ORD-00191,CUST-0026,Bob Taylor,MacBook Pro,Electronics,8.0,1899.99,15199.92,2024-05-02,2024-05-13,Shipped
+ORD-00192,CUST-0003,Jack Jones,Wireless Mouse,,1.0,29.99,29.99,2024-12-29,2025-01-07,Delivered
+ORD-00193,CUST-0013,Iris Johnson,MacBook Pro,Electronics,11.0,1899.99,20899.89,2024-03-22,2024-03-25,Shipped
+ORD-00194,CUST-0043,Grace Taylor,Laptop Pro 15,Electronics,18.0,1299.99,23399.82,2024-06-08,2024-06-10,Delivered
+ORD-00195,CUST-0023,Frank Williams,Desk Lamp,Office,10.0,39.99,399.90000000000003,2024-10-09,2024-10-17,Shipped
+ORD-00196,CUST-0041,Iris Wilson,Mechanical Keyboard,Accessories,3.0,89.99,269.96999999999997,2024-01-08,2024-01-14,Shipped
+ORD-00197,CUST-0034,Grace Jones,Smartphone X12,Electronics,7.0,799.99,5599.93,2024-10-09,2024-10-19,Shipped
+ORD-00198,CUST-0050,,Desk Lamp,Office,16.0,39.99,639.84,2024-07-27,2024-08-01,Cancelled
+ORD-00199,CUST-0030,Eve Wilson,Standing Desk,,,599.99,9599.84,2024-02-17,2024-02-28,Delivered
+ORD-00200,CUST-0048,Bob Williams,Laptop Air 13,Electronics,17.0,999.99,16999.83,2024-04-25,2024-05-02,Shipped
+ORD-00177,CUST-0021,Bob Miller,Wireless Mouse,Accessories,9.0,29.99,269.90999999999997,2024-08-14,2024-08-22,Delivered
+ORD-00172,CUST-0002,Diana Davis,Monitor 27inch,Electronics,6.0,399.99,2399.94,2024-09-22,2024-10-06,Shipped
+ORD-00141,CUST-0021,Bob Miller,Headphones Pro,Electronics,19.0,199.99,3799.8100000000004,2024-06-27,2024-06-29,Pending
