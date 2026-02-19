@@ -6,69 +6,67 @@ use Symfony\Component\Process\Process;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
 
 class DataCleaningService
 {
-    protected $pythonPath;
-    protected $scriptPath;
+    protected string $scriptPath;
+    protected string $containerName;
 
     public function __construct()
     {
-        // Auto-detect Python path or use config
-        $this->pythonPath = config('services.python.path', 'python3');
-        $this->scriptPath = base_path('python_scripts/data_cleaner.py');
+        // 1. Initialize the property that was causing the crash
+        $this->containerName = 'datasci-python';
+
+        // 2. Path inside the PYTHON container to the cleaner script
+        $this->scriptPath = '/app/python_scripts/data_cleaner.py';
     }
 
     /**
-     * Clean a single file
-     *
-     * @param string $inputPath Full path to input file
-     * @param string $outputPath Full path where cleaned CSV should be saved
-     * @param array $options Optional cleaning parameters
-     * @return array Result with status, message, and metadata
+     * Clean a single file (Docker version)
      */
-    public function cleanFile($inputPath, $outputPath, array $options = [])
+    public function cleanFile(string $inputPath, string $outputPath, array $options = []): array
     {
-        // Validate input file exists
-        if (!file_exists($inputPath)) {
-            throw new \Exception("Input file not found: {$inputPath}");
-        }
+        // Convert Laravel absolute paths to the paths the Python container sees.
+        $pythonInput = str_replace(storage_path('app/private'), '/app/python_shared_data', $inputPath);
+        $pythonOutput = str_replace(storage_path('app/private'), '/app/python_shared_data', $outputPath);
 
-        // Ensure output directory exists
-        $outputDir = dirname($outputPath);
-        if (!is_dir($outputDir)) {
-            mkdir($outputDir, 0755, true);
-        }
-
-        // Build command
+        // Build the Docker command
         $command = [
-            $this->pythonPath,
-            $this->scriptPath,
-            $inputPath,
-            $outputPath
+            'docker', 'exec', '-u', 'root', 
+            $this->containerName, 
+            'python', $this->scriptPath,
+            $pythonInput,
+            $pythonOutput
         ];
 
         // Add options as JSON if provided
         if (!empty($options)) {
-            $command[] = json_encode($options);
+            $command[] = json_encode($options, JSON_UNESCAPED_UNICODE);
         }
 
-        // Create and run process
+        Log::info('Running python cleaner via Docker', ['cmd' => implode(' ', $command)]);
+
         $process = new Process($command);
-        $process->setTimeout(3600); // 1 hour timeout for large files
-        
+        $process->setTimeout(3600); // 1 hour timeout
+
         try {
             $process->mustRun();
-            
-            $output = $process->getOutput();
-            $result = json_decode($output, true);
-            
+
+            $stdout = $process->getOutput();
+            $result = json_decode($stdout, true);
+
+            // If JSON decode fails, try to extract it from any stray text output
             if (!$result) {
-                throw new \Exception("Failed to parse Python script output");
+                $jsonStr = $this->extractJsonFromText($stdout);
+                $result = $jsonStr ? json_decode($jsonStr, true) : null;
+            }
+
+            if (!$result) {
+                throw new \Exception("Failed to parse Python output. STDOUT: {$stdout}");
             }
 
             Log::info('Data cleaning completed', $result);
-            
             return $result;
 
         } catch (ProcessFailedException $exception) {
@@ -78,68 +76,71 @@ class DataCleaningService
                 'input' => $inputPath,
                 'output' => $outputPath
             ]);
-            
+
             throw new \Exception("Data cleaning failed: " . $error);
         }
     }
 
     /**
-     * Clean an uploaded file from Laravel storage
-     *
-     * @param string $storagePath Path in storage/app (e.g., 'uploads/file.xlsx')
-     * @param array $options Optional cleaning parameters
-     * @return array Result including the path to cleaned file
+     * Helper to find JSON block in a string if Python prints extra info
      */
-    public function cleanUploadedFile($storagePath, array $options = [])
+    private function extractJsonFromText(string $text): ?string
     {
-        // Use Storage facade to get the real path
-        $disk = Storage::disk('local');
-        
-        // Check if file exists using Storage
-        if (!$disk->exists($storagePath)) {
-            throw new \Exception("File not found in storage: {$storagePath}");
-        }
-        
-        // Get the actual filesystem path
-        $inputPath = $disk->path($storagePath);
-        
-        Log::info('Processing file', [
-            'storage_path' => $storagePath,
-            'real_path' => $inputPath,
-            'exists' => file_exists($inputPath)
-        ]);
-        
-        // Generate output filename
-        $pathInfo = pathinfo($storagePath);
-        $outputFilename = $pathInfo['filename'] . '_CLEANED.csv';
-        
-        // Use storage_path for output
-        $outputDir = storage_path('app/cleaned_output');
-        if (!is_dir($outputDir)) {
-            mkdir($outputDir, 0755, true);
-        }
-        
-        $outputPath = $outputDir . '/' . $outputFilename;
-
-        $result = $this->cleanFile($inputPath, $outputPath, $options);
-        
-        // Add storage path to result
-        $result['cleaned_file_path'] = 'cleaned_output/' . $outputFilename;
-        
-        return $result;
+        preg_match('/\{.*\}/s', $text, $matches);
+        return $matches[0] ?? null;
     }
 
     /**
-     * Process multiple files in batch
-     *
-     * @param array $files Array of storage paths
-     * @param array $options Optional cleaning parameters
-     * @return array Results for each file
+     * Clean uploaded file
      */
-    public function cleanBatch(array $files, array $options = [])
+    public function cleanUploadedFile(string $pathOrStorage, array $options = []): array
+    {
+        $inputPath = null;
+        $baseNameForOutput = null;
+
+        // Determine real file path
+        if (file_exists($pathOrStorage)) {
+            $inputPath = $pathOrStorage;
+            $baseNameForOutput = pathinfo($inputPath, PATHINFO_FILENAME);
+        } else {
+            $disk = Storage::disk('local');
+            if (!$disk->exists($pathOrStorage)) {
+                throw new \Exception("File not found: {$pathOrStorage}");
+            }
+            $inputPath = $disk->path($pathOrStorage);
+            $baseNameForOutput = pathinfo($pathOrStorage, PATHINFO_FILENAME);
+        }
+
+        // Set permissions for shared access
+        @chmod($inputPath, 0666);
+
+        $userId = Auth::id() ?? 'shared';
+
+        // Set output to our shared volume folder
+        $outputDir = storage_path('app/private/cleaned/' . $userId);
+        if (!is_dir($outputDir)) {
+            mkdir($outputDir, 0777, true);
+        }
+
+        $outputFilename = $baseNameForOutput . '_CLEANED.csv';
+        $outputPath = $outputDir . DIRECTORY_SEPARATOR . $outputFilename;
+
+        $result = $this->cleanFile($inputPath, $outputPath, $options);
+
+        // Ensure the output file is readable by Laravel
+        if (file_exists($outputPath)) {
+            @chmod($outputPath, 0666);
+        }
+
+        // Path for the controller to use
+        $result['cleaned_file_path'] = 'cleaned/' . $userId . '/' . $outputFilename;
+
+        return $result;
+    }
+
+    public function cleanBatch(array $files, array $options = []): array
     {
         $results = [];
-        
         foreach ($files as $file) {
             try {
                 $results[] = $this->cleanUploadedFile($file, $options);
@@ -151,29 +152,17 @@ class DataCleaningService
                 ];
             }
         }
-        
         return $results;
     }
 
-    /**
-     * Get list of supported file formats
-     *
-     * @return array
-     */
-    public function getSupportedFormats()
+    public function getSupportedFormats(): array
     {
         return ['xlsx', 'xls', 'csv', 'txt', 'json', 'xml'];
     }
 
-    /**
-     * Validate if file format is supported
-     *
-     * @param string $filename
-     * @return bool
-     */
-    public function isFormatSupported($filename)
+    public function isFormatSupported(string $filename): bool
     {
         $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-        return in_array($extension, $this->getSupportedFormats());
+        return in_array($extension, $this->getSupportedFormats(), true);
     }
 }
