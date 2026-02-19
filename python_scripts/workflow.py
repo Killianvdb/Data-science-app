@@ -463,9 +463,9 @@ def workflow_test_mode(no_llm_enricher=False):
     print_header("🧪 WORKFLOW: MODE TEST")
 
     # Générer les données de test
-    print(f"\n📍 Génération des données de test...")
+    print(f"\n📍 Generating test data...")
     cmd = ["python3", "generate_test_data.py"]
-    success, _ = run_command(cmd, "Génération données de test")
+    success, _ = run_command(cmd, "Generating test data")
 
     if not success:
         print("❌ Échec génération données de test")
@@ -474,7 +474,7 @@ def workflow_test_mode(no_llm_enricher=False):
     # Lister les fichiers générés
     test_dir = "test_data"
     if not os.path.exists(test_dir):
-        print(f"❌ Dossier '{test_dir}' introuvable après génération")
+        print(f"❌ Folder '{test_dir}' not found")
         return False
 
     test_files = sorted([
@@ -484,10 +484,10 @@ def workflow_test_mode(no_llm_enricher=False):
     ])
 
     if not test_files:
-        print("❌ Aucun fichier de test généré")
+        print("❌ No test files generated")
         return False
 
-    print(f"\n  📊 {len(test_files)} fichiers de test:")
+    print(f"\n  📊 {len(test_files)} test files :")
     for f in test_files:
         print(f"     • {os.path.basename(f)}")
 
@@ -509,7 +509,7 @@ def workflow_test_mode(no_llm_enricher=False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Master Workflow — Nettoyage et Cross-référencement",
+        description="Master Workflow — Cleaning and Cross Referencing",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemples:
@@ -569,14 +569,14 @@ Exemples:
 
     if args.mode != 'test':
         if not args.files:
-            print(f"\n❌ Aucun fichier fourni pour le mode '{args.mode}'")
+            print(f"\n❌ No input files provided for mode '{args.mode}'")
             parser.print_help()
             return 1
         if not check_input_files(args.files):
             return 1
 
     if args.rules and not os.path.exists(args.rules):
-        print(f"\n❌ Fichier rules.json introuvable: {args.rules}")
+        print(f"\n❌ rules.json file not found: {args.rules}")
         return 1
 
     # ── Header ──────────────────────────────────────────────────────
@@ -584,7 +584,7 @@ Exemples:
     print(f"  Mode    : {args.mode.upper()}")
     print(f"  Date    : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     if args.files:
-        print(f"  Fichiers: {[os.path.basename(f) for f in args.files]}")
+        print(f"  Files   : {[os.path.basename(f) for f in args.files]}")
     if args.rules:
         print(f"  Rules   : {args.rules}")
 
@@ -615,7 +615,7 @@ Exemples:
         success = workflow_test_mode(no_llm_enricher=args.no_llm_enricher)
 
     # ── Résultat final ──────────────────────────────────────────────
-    print_header("✅ TERMINÉ" if success else "❌ ÉCHEC")
+    print_header("✅ TERMINATED" if success else "❌ FAILED")
     return 0 if success else 1
 
 

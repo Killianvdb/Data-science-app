@@ -262,13 +262,13 @@ def generate_rules_json():
 
 def main():
     print(f"\n{'='*60}")
-    print(f"🧪 GÉNÉRATION DES DONNÉES DE TEST")
+    print(f"🧪 GENERATION OF TEST DATA")
     print(f"{'='*60}")
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     # Générer les datasets
-    print(f"\n📊 Génération des datasets...")
+    print(f"\n📊 Generation of datasets...")
 
     products_df  = generate_products()
     customers_df = generate_customers()
@@ -290,20 +290,20 @@ def main():
         json.dump(rules, f, indent=2)
 
     # Résumé
-    print(f"\n✅ Fichiers générés dans '{OUTPUT_DIR}/':")
-    print(f"   📦 products.csv   → {len(products_df)} produits (référence propre)")
-    print(f"   👥 customers.csv  → {len(customers_df)} clients  (référence propre)")
-    print(f"   🛒 orders.csv     → {len(orders_df)} commandes (avec erreurs intentionnelles)")
-    print(f"   📋 rules.json     → règles custom de validation")
+    print(f"\n✅ Files generated in '{OUTPUT_DIR}/':")
+    print(f"   📦 products.csv   → {len(products_df)} products (clean reference)")
+    print(f"   👥 customers.csv  → {len(customers_df)} customers (clean reference)")
+    print(f"   🛒 orders.csv     → {len(orders_df)} orders (with intentional errors)")
+    print(f"   📋 rules.json     → custom validation rules")
 
-    print(f"\n⚠️  Erreurs intentionnelles dans orders.csv:")
-    print(f"   • ~20% Category NULL        → à remplir via products.csv")
-    print(f"   • ~10% CustomerName NULL    → à remplir via customers.csv")
-    print(f"   •  ~5% Prix négatifs        → à corriger (valeur absolue)")
-    print(f"   •  ~3% DeliveryDate < OrderDate → violation métier")
-    print(f"   •  ~8% Quantity NULL        → à imputer")
-    print(f"   •  ~5% Dates mal formatées  → à normaliser (DD/MM/YYYY)")
-    print(f"   •    3 Doublons             → à supprimer")
+    print(f"\n⚠️  Intentional errors in orders.csv:")
+    print(f"   • ~20% Category NULL        → to be filled from products.csv")
+    print(f"   • ~10% CustomerName NULL    → to be filled from customers.csv")
+    print(f"   •  ~5% Negative UnitPrice    → to be corrected (absolute value)")
+    print(f"   •  ~3% DeliveryDate < OrderDate → business rule violation")
+    print(f"   •  ~8% Quantity NULL        → to be imputed")
+    print(f"   •  ~5% Dates mal formatées  → to be normalized (DD/MM/YYYY)")
+    print(f"   •    3 Doublons             → to be removed")
 
     print(f"\n🚀 Pour tester le pipeline complet:")
     print(f"   python3 workflow.py full test_data/orders.csv test_data/products.csv test_data/customers.csv \\")

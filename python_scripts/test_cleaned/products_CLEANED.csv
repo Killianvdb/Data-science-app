@@ -1,0 +1,16 @@
+Product,Category,UnitPrice,SKU,Stock,Supplier
+Laptop Pro 15,Electronics,1299.99,LPT-001,102,SupplierB
+Laptop Air 13,Electronics,999.99,LPT-002,435,SupplierA
+MacBook Pro,Electronics,1899.99,MBP-001,348,SupplierA
+Wireless Mouse,Accessories,29.99,MSE-001,270,SupplierA
+Mechanical Keyboard,Accessories,89.99,KBD-001,106,SupplierC
+USB-C Hub,Accessories,49.99,HUB-001,71,SupplierC
+Monitor 27inch,Electronics,399.99,MON-001,188,SupplierC
+Webcam HD,Electronics,79.99,CAM-001,20,SupplierA
+Desk Lamp,Office,39.99,LMP-001,102,SupplierB
+Office Chair,Furniture,299.99,CHR-001,121,SupplierA
+Standing Desk,Furniture,599.99,DSK-001,466,SupplierA
+Notebook A5,Stationery,4.99,NTB-001,214,SupplierB
+Pen Pack x10,Stationery,8.99,PEN-001,330,SupplierA
+Headphones Pro,Electronics,199.99,HPH-001,458,SupplierA
+Smartphone X12,Electronics,799.99,SPH-001,87,SupplierB
