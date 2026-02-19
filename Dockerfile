@@ -1,6 +1,6 @@
 FROM php:8.2-fpm
 
-# 1. Install system dependencies + Docker CLI
+# 1. Install system dependencies + Node.js
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
@@ -8,55 +8,45 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libzip-dev \
     libonig-dev \
     libpng-dev \
-    libssl-dev \
-    zlib1g-dev \
     libicu-dev \
-    nodejs \
-    npm \
-    ca-certificates \
-    gnupg \
-    lsb-release \
-    && mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
-    && apt-get update && apt-get install -y docker-ce-cli \
+    unzip \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Install PHP extensions
-RUN pecl install redis && docker-php-ext-enable redis
 RUN docker-php-ext-install pdo pdo_pgsql zip opcache bcmath mbstring gd intl
 
 # 3. Install Composer
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# 4. Set up the working directory
+# 4. Set working directory
 WORKDIR /app
 
-# 5. Handle Python dependencies (Optional now, since Python has its own container)
-# You can remove these if you want to save space, but keeping them doesn't hurt.
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt --break-system-packages || true
+# 5. Copy composer files
+COPY composer.json composer.lock ./
 
-# 6. Create non-root user
-RUN groupadd -g 1000 appuser && \
-    useradd -r -u 1000 -g appuser appuser
+# 6. Install PHP dependencies
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
-# 7. Copy application code with ownership
-COPY --chown=appuser:appuser . .
+# 7. Copy package.json for Node dependencies
+COPY package*.json ./
 
-# 8. Install Laravel dependencies
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader || true
+# 8. Install Node dependencies
+RUN npm install
 
-# 9. Permission Fixes
-RUN chmod -R 775 storage bootstrap/cache && \
-    chown -R appuser:appuser /app/storage /app/bootstrap/cache
+# 9. Copy application code
+COPY . .
 
-# Fix for home directory permissions
-USER root
-RUN mkdir -p /home/appuser && chown -R appuser:appuser /home/appuser
+# 10. Build assets
+RUN npm run build
 
-# 10. Switch to the non-root user
-USER root
+# 11. Finalize composer
+RUN composer dump-autoload --optimize
 
-EXPOSE 9000
-CMD ["php-fpm"]
+# 12. Fix permissions
+RUN chmod -R 777 storage bootstrap/cache
+
+EXPOSE 8000
+
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]

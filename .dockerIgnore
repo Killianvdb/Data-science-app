@@ -13,5 +13,7 @@ storage/framework/cache/*
 storage/framework/views/*
 bootstrap/cache/*
 vendor
+.venv
+venv
 .vscode
 .idea
