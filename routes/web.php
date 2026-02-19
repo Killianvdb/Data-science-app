@@ -5,6 +5,7 @@ use App\Http\Controllers\ContactController;
 use App\Http\Controllers\UploadController;
 use App\Http\Controllers\VisualizationController;
 use App\Http\Controllers\DatasetController;
+use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\UserController;
 
@@ -43,7 +44,6 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Legacy Upload Controller (Keeping this if you still use it elsewhere)
     Route::get('/upload', [UploadController::class, 'create'])->name('upload.create');
     Route::post('/upload', [UploadController::class, 'store'])->name('upload.store');
 
@@ -55,12 +55,16 @@ Route::middleware('auth')->group(function () {
 
         // Actions
         Route::post('/upload', [DatasetController::class, 'upload'])->name('upload');
-        Route::post('/batch-upload', [DatasetController::class, 'batchUpload'])->name('batch-upload');
+        Route::post('/batch-upload', [DatasetController::class, 'batchUpload'])->name('batchUpload');
 
         // File Management
         Route::get('/files', [DatasetController::class, 'showFiles'])->name('files');
         Route::get('/download/{filename}/{alias?}', [DatasetController::class, 'download'])->name('download');
     });
+
+    //payments and subscriptions
+    Route::get('/pricing', [SubscriptionController::class, 'index'])->name('pricing');
+    Route::post('/subscription/change', [SubscriptionController::class, 'change'])->name('subscription.change');
 
 
 /*
