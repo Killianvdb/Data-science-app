@@ -35,7 +35,7 @@ class GroqLLM:
             from groq import Groq
             api_key = os.environ.get("GROQ_API_KEY")
             if not api_key:
-                print("⚠️  GROQ_API_KEY undefined (mode without LLM)", file=sys.stderr)
+                print("⚠️  GROQ_API_KEY non définie (mode sans LLM)", file=sys.stderr)
                 return
             self.client = Groq(api_key=api_key)
             for model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
@@ -45,14 +45,14 @@ class GroqLLM:
                     )
                     self.model = model
                     self.available = True
-                    print(f"✅ Groq LLM initialized ({model})", file=sys.stderr)
+                    print(f"✅ Groq LLM initialisé ({model})", file=sys.stderr)
                     break
                 except:
                     continue
             if not self.available:
-                print("⚠️  No available Groq model", file=sys.stderr)
+                print("⚠️  Aucun modèle Groq disponible", file=sys.stderr)
         except ImportError:
-            print("⚠️  Package 'groq' not installed", file=sys.stderr)
+            print("⚠️  Package 'groq' non installé", file=sys.stderr)
 
     def call(self, prompt, max_tokens=2000):
         if not self.available:
@@ -67,7 +67,7 @@ class GroqLLM:
             )
             return response.choices[0].message.content
         except Exception as e:
-            print(f"⚠️  LLM error: {e}", file=sys.stderr)
+            print(f"⚠️  Erreur LLM: {e}", file=sys.stderr)
             return None
 
 # ============================================================================
@@ -78,12 +78,12 @@ def load_csv(path):
     for enc in ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']:
         try:
             df = pd.read_csv(path, encoding=enc, on_bad_lines='skip')
-            print(f"   ✅ Loaded: {os.path.basename(path)} ({len(df)} rows, encoding={enc})", file=sys.stderr)
+            print(f"   ✅ Chargé: {os.path.basename(path)} ({len(df)} lignes, encoding={enc})", file=sys.stderr)
             return df
         except UnicodeDecodeError:
             continue
         except Exception as e:
-            print(f"   ❌ Error: {e}", file=sys.stderr)
+            print(f"   ❌ Erreur: {e}", file=sys.stderr)
             return None
     print(f"   ❌ Impossible de charger: {path}", file=sys.stderr)
     return None
@@ -157,27 +157,27 @@ If none found: {{"join_pairs": []}}"""
         rapport = {"ref_file": ref_name, "method": None, "join_keys": [],
                    "columns_added": [], "rows_enriched": 0}
 
-        print(f"\n   🔗 Cross-reference with: {ref_name}", file=sys.stderr)
+        print(f"\n   🔗 Cross-reference avec: {ref_name}", file=sys.stderr)
 
         exact_keys = self.find_join_keys_exact(df_main, df_ref)
 
         if exact_keys:
-            print(f"      ✅ Exact keys: {exact_keys}", file=sys.stderr)
+            print(f"      ✅ Clés exactes: {exact_keys}", file=sys.stderr)
             rapport["method"] = "exact"
             rapport["join_keys"] = exact_keys
             df_main = self._merge(df_main, df_ref, exact_keys, exact_keys, rapport)
         else:
-            print(f"      🤖 No exact key found, consulting LLM...", file=sys.stderr)
+            print(f"      🤖 Pas de clé exacte, consultation LLM...", file=sys.stderr)
             llm_pairs = self.find_join_keys_llm(df_main, df_ref)
             if llm_pairs:
                 main_keys = [p["main_column"] for p in llm_pairs]
                 ref_keys  = [p["ref_column"]  for p in llm_pairs]
-                print(f"      ✅ LLM keys: {list(zip(main_keys, ref_keys))}", file=sys.stderr)
+                print(f"      ✅ Clés LLM: {list(zip(main_keys, ref_keys))}", file=sys.stderr)
                 rapport["method"] = "llm"
                 df_ref_r = df_ref.rename(columns={ref_keys[i]: main_keys[i] for i in range(len(main_keys))})
                 df_main = self._merge(df_main, df_ref_r, main_keys, main_keys, rapport)
             else:
-                print(f"      ❌ No key found, reference ignored", file=sys.stderr)
+                print(f"      ❌ Aucune clé trouvée, référence ignorée", file=sys.stderr)
                 rapport["method"] = "none"
 
         return df_main, rapport
@@ -187,7 +187,7 @@ If none found: {{"join_pairs": []}}"""
         cols_to_fill = [c for c in df_ref.columns if c in df_main.columns and c not in ref_keys]
 
         if not cols_to_add and not cols_to_fill:
-            print(f"      ℹ️  No column to enrich", file=sys.stderr)
+            print(f"      ℹ️  Aucune colonne à enrichir", file=sys.stderr)
             return df_main
 
         df_m = df_main.copy()
@@ -212,7 +212,7 @@ If none found: {{"join_pairs": []}}"""
                 df_merged[col] = df_merged[col].combine_first(df_merged[ref_col])
                 filled = nb - df_merged[col].isna().sum()
                 if filled > 0:
-                    print(f"      📥 {col}: {filled} NULL filled", file=sys.stderr)
+                    print(f"      📥 {col}: {filled} NULL remplis", file=sys.stderr)
                     rapport["rows_enriched"] += filled
                 df_merged.drop(columns=[ref_col], inplace=True)
                 self.ref_columns.add(col)  # Fix 1
@@ -222,7 +222,7 @@ If none found: {{"join_pairs": []}}"""
             if ref_col in df_merged.columns:
                 df_merged[col] = df_merged[ref_col]
                 df_merged.drop(columns=[ref_col], inplace=True)
-                print(f"      ➕ Column added: {col}", file=sys.stderr)
+                print(f"      ➕ Colonne ajoutée: {col}", file=sys.stderr)
                 rapport["columns_added"].append(col)
                 self.ref_columns.add(col)  # Fix 1
 
@@ -249,10 +249,10 @@ class Validator:
         try:
             with open(path) as f:
                 rules = json.load(f).get("rules", [])
-            print(f"   📋 {len(rules)} custom rules loaded", file=sys.stderr)
+            print(f"   📋 {len(rules)} règles custom chargées", file=sys.stderr)
             return rules
         except Exception as e:
-            print(f"   ⚠️  Error in rules.json: {e}", file=sys.stderr)
+            print(f"   ⚠️  Erreur rules.json: {e}", file=sys.stderr)
             return []
 
     def generate_llm_rules(self, df):
@@ -303,13 +303,13 @@ Max 8 rules. Only for existing columns."""
             return []
         try:
             rules = json.loads(result).get("rules", [])
-            print(f"   🤖 {len(rules)} rules generated by LLM", file=sys.stderr)
+            print(f"   🤖 {len(rules)} règles générées par LLM", file=sys.stderr)
             return rules
         except:
             return []
 
     def validate(self, df):
-        print(f"\n🔍 Business validation...", file=sys.stderr)
+        print(f"\n🔍 Validation métier...", file=sys.stderr)
 
         llm_rules = self.generate_llm_rules(df)
         merged = {r["rule_id"]: r for r in llm_rules}
@@ -318,10 +318,10 @@ Max 8 rules. Only for existing columns."""
         all_rules = list(merged.values())
 
         if not all_rules:
-            print("   ℹ️  No rule applicable", file=sys.stderr)
+            print("   ℹ️  Aucune règle applicable", file=sys.stderr)
             return df, []
 
-        print(f"   📋 {len(all_rules)} rules ({len(llm_rules)} LLM + {len(self.custom_rules)} custom)", file=sys.stderr)
+        print(f"   📋 {len(all_rules)} règles ({len(llm_rules)} LLM + {len(self.custom_rules)} custom)", file=sys.stderr)
 
         rapport = []
         for rule in all_rules:
@@ -352,26 +352,26 @@ Max 8 rules. Only for existing columns."""
             if action == "abs" and col in df.columns:
                 df.loc[mask, col] = df.loc[mask, col].abs()
                 f = v
-                print(f"      → absolute value", file=sys.stderr)
+                print(f"      → valeur absolue", file=sys.stderr)
             elif action == "drop":
                 df = df[~mask].copy()
                 f = v
-                print(f"      → {v} rows deleted", file=sys.stderr)
+                print(f"      → {v} lignes supprimées", file=sys.stderr)
             elif action == "null" and col in df.columns:
                 df.loc[mask, col] = np.nan
                 f = v
-                print(f"      → set to NULL", file=sys.stderr)
+                print(f"      → mis à NULL", file=sys.stderr)
             elif action == "set" and col in df.columns and val is not None:
                 df.loc[mask, col] = val
                 f = v
-                print(f"      → set to '{val}'", file=sys.stderr)
+                print(f"      → mis à '{val}'", file=sys.stderr)
             elif action == "flag":
                 flag_col = f"FLAG_{rid}"
                 df[flag_col] = False
                 df.loc[mask, flag_col] = True
                 print(f"      → flag: {flag_col}", file=sys.stderr)
         except Exception as e:
-            print(f"   ❌ Error in rule [{rid}]: {e}", file=sys.stderr)
+            print(f"   ❌ Erreur règle [{rid}]: {e}", file=sys.stderr)
         return df, v, f
 
 # ============================================================================
@@ -440,14 +440,14 @@ formula must be valid pandas."""
             return []
 
     def recalculate(self, df):
-        print(f"\n🔢 Detection of derived columns...", file=sys.stderr)
+        print(f"\n🔢 Détection des colonnes dérivées...", file=sys.stderr)
 
         formulas = self.detect_formulas(df)
         if not formulas:
-            print("   ℹ️  No derived column detected", file=sys.stderr)
+            print("   ℹ️  Aucune colonne dérivée détectée", file=sys.stderr)
             return df, []
 
-        print(f"   🤖 {len(formulas)} derived column(s) detected", file=sys.stderr)
+        print(f"   🤖 {len(formulas)} formule(s) détectée(s)", file=sys.stderr)
 
         rapport = []
         for fi in formulas:
@@ -472,26 +472,26 @@ formula must be valid pandas."""
 
                 match_pct = (abs(df.loc[valid, target] - expected[valid]) < 0.05).sum() / valid.sum()
                 if match_pct < 0.70:
-                    print(f"      ⚠️  Only {match_pct*100:.0f}% match, ignored", file=sys.stderr)
+                    print(f"      ⚠️  Seulement {match_pct*100:.0f}% de correspondance, ignorée", file=sys.stderr)
                     continue
 
-                print(f"      ✅ Formula validated ({match_pct*100:.0f}% match)", file=sys.stderr)
+                print(f"      ✅ Formule validée ({match_pct*100:.0f}% match)", file=sys.stderr)
 
                 # Recalculer les valeurs incohérentes ET les NULL
                 incoherent = valid & (abs(df[target] - expected) > 0.05)
                 to_fix = incoherent | df[target].isna()
 
                 if to_fix.sum() == 0:
-                    print(f"      ℹ️  Everything is consistent.", file=sys.stderr)
+                    print(f"      ℹ️  Tout est cohérent", file=sys.stderr)
                     continue
 
                 df.loc[to_fix, target] = expected[to_fix]
                 count = int(to_fix.sum())
-                print(f"      🔢 {count} values recalculated", file=sys.stderr)
+                print(f"      🔢 {count} valeurs recalculées", file=sys.stderr)
                 rapport.append({"target": target, "formula": readable, "recalculated": count})
 
             except Exception as e:
-                print(f"      ❌ Error: {e}", file=sys.stderr)
+                print(f"      ❌ Erreur: {e}", file=sys.stderr)
 
         return df, rapport
 
@@ -512,27 +512,27 @@ class LLMEnricher:
 
     def enrich(self, df, ref_columns=None, max_rows=50):
         if not self.llm.available:
-            print("   ℹ️  LLM Enrichment disabled", file=sys.stderr)
+            print("   ℹ️  LLM Enricher désactivé", file=sys.stderr)
             return df, []
 
         ref_columns = set(ref_columns or [])
         null_cols = [(c, int(df[c].isna().sum())) for c in df.columns if df[c].isna().sum() > 0]
 
         if not null_cols:
-            print("   ✅ No NULL remaining", file=sys.stderr)
+            print("   ✅ Aucun NULL restant", file=sys.stderr)
             return df, []
 
-        print(f"\n🤖 LLM Enricher — {len(null_cols)} columns with NULL", file=sys.stderr)
+        print(f"\n🤖 LLM Enricher — {len(null_cols)} colonnes avec NULL", file=sys.stderr)
         report = []
 
         for col, null_count in null_cols:
             # Fix 1: ignorer les colonnes de référence
             if col in ref_columns:
-                print(f"   🔗 {col}: ignored (reference column)", file=sys.stderr)
+                print(f"   🔗 {col}: ignoré (colonne de référence)", file=sys.stderr)
                 continue
 
             if any(kw in col.lower() for kw in self.IDENTITY_KEYWORDS):
-                print(f"   🔒 {col}: ignored (identity)", file=sys.stderr)
+                print(f"   🔒 {col}: ignoré (identité)", file=sys.stderr)
                 continue
 
             null_mask = df[col].isna()
@@ -540,7 +540,7 @@ class LLMEnricher:
             if len(rows_to_enrich) == 0:
                 continue
 
-            print(f"   🔍 {col} ({min(null_count, max_rows)} rows)", file=sys.stderr)
+            print(f"   🔍 {col} ({min(null_count, max_rows)} lignes)", file=sys.stderr)
 
             context_rows = []
             for idx, row in rows_to_enrich.iterrows():
@@ -570,7 +570,7 @@ Only confidence >= 0.7."""
                     if p.get("confidence", 0) >= 0.7 and p.get("index") is not None:
                         df.at[p["index"], col] = p["predicted_value"]
                         applied += 1
-                print(f"      ✅ {applied}/{len(rows_to_enrich)} predicted", file=sys.stderr)
+                print(f"      ✅ {applied}/{len(rows_to_enrich)} prédites", file=sys.stderr)
                 report.append({"column": col, "total_null": null_count, "enriched": applied})
             except Exception as e:
                 print(f"      ❌ {e}", file=sys.stderr)
@@ -585,22 +585,22 @@ class Imputer:
     IDENTITY_KEYWORDS = ['id', 'email', 'phone', 'address', 'name', 'user', 'customer', 'code']
 
     def impute(self, df):
-        print(f"\n🔧 Final Imputation...", file=sys.stderr)
+        print(f"\n🔧 Imputation finale...", file=sys.stderr)
         null_cols = [(c, int(df[c].isna().sum())) for c in df.columns if df[c].isna().sum() > 0]
 
         if not null_cols:
-            print("   ✅ No NULL remaining", file=sys.stderr)
+            print("   ✅ Aucun NULL", file=sys.stderr)
             return df
 
         for col, count in null_cols:
             if any(kw in col.lower() for kw in self.IDENTITY_KEYWORDS):
-                print(f"   🔒 {col}: {count} NULL preserved (identity)", file=sys.stderr)
+                print(f"   🔒 {col}: {count} NULL conservés (identité)", file=sys.stderr)
                 continue
             if pd.api.types.is_numeric_dtype(df[col]):
                 med = df[col].median()
                 if pd.notna(med):
                     df[col] = df[col].fillna(med)
-                    print(f"   🔢 {col}: median ({med:.2f})", file=sys.stderr)
+                    print(f"   🔢 {col}: médiane ({med:.2f})", file=sys.stderr)
             else:
                 mode = df[col].mode()
                 if not mode.empty:
@@ -668,15 +668,15 @@ class CrossReferencePipeline:
                 df, ref_r = self.cross_ref_engine.enrich(df, df_ref, os.path.basename(ref_file))
                 rapport["cross_reference"].append(ref_r)
         else:
-            print(f"\n   ℹ️  Simple mode (no references)", file=sys.stderr)
+            print(f"\n   ℹ️  Mode simple (pas de références)", file=sys.stderr)
 
         # 2. Validation
-        print(f"\n{'─'*40}\n2️⃣  BUSINESS VALIDATION\n{'─'*40}", file=sys.stderr)
+        print(f"\n{'─'*40}\n2️⃣  VALIDATION MÉTIER\n{'─'*40}", file=sys.stderr)
         df, val_r = self.validator.validate(df)
         rapport["validation"] = val_r
 
         # 3. Recalcul colonnes dérivées (Fix 2)
-        print(f"\n{'─'*40}\n3️⃣  FINAL DERIVED COLUMNS RECALCULATION\n{'─'*40}", file=sys.stderr)
+        print(f"\n{'─'*40}\n3️⃣  RECALCUL COLONNES DÉRIVÉES\n{'─'*40}", file=sys.stderr)
         df, der_r = self.derived_recalc.recalculate(df)
         rapport["derived_columns"] = der_r
 
@@ -689,7 +689,7 @@ class CrossReferencePipeline:
             rapport["enrichment"] = enr_r
 
         # 5. Imputation finale
-        print(f"\n{'─'*40}\n5️⃣  FINAL IMPUTATION\n{'─'*40}", file=sys.stderr)
+        print(f"\n{'─'*40}\n5️⃣  IMPUTATION FINALE\n{'─'*40}", file=sys.stderr)
         df = self.imputer.impute(df)
 
         # 6. Export
@@ -699,10 +699,10 @@ class CrossReferencePipeline:
         out_csv, out_json = export_results(df, main_file, output_dir, rapport)
 
         print(f"\n{'='*60}", file=sys.stderr)
-        print(f"✅ PIPELINE TERMINATED", file=sys.stderr)
-        print(f"   Rows  : {rapport['initial_rows']} → {rapport['final_rows']}", file=sys.stderr)
-        print(f"   Columns: {rapport['initial_cols']} → {rapport['final_cols']}", file=sys.stderr)
-        print(f"   NULL remaining: {rapport['null_remaining']}", file=sys.stderr)
+        print(f"✅ PIPELINE TERMINÉ", file=sys.stderr)
+        print(f"   Lignes  : {rapport['initial_rows']} → {rapport['final_rows']}", file=sys.stderr)
+        print(f"   Colonnes: {rapport['initial_cols']} → {rapport['final_cols']}", file=sys.stderr)
+        print(f"   NULL restants: {rapport['null_remaining']}", file=sys.stderr)
         print(f"{'='*60}", file=sys.stderr)
 
         return {"status": "success", "output_csv": out_csv, "output_report": out_json, "rapport": rapport}
@@ -721,7 +721,7 @@ def main():
 
     for f in args.files:
         if not os.path.exists(f):
-            print(json.dumps({"status": "error", "message": f"File not found: {f}"}))
+            print(json.dumps({"status": "error", "message": f"Introuvable: {f}"}))
             sys.exit(1)
 
     llm = GroqLLM()
@@ -739,7 +739,7 @@ def main():
             "null_remaining": result["rapport"]["null_remaining"]
         }))
     else:
-        print(json.dumps({"status": "error", "message": "Pipeline failed"}))
+        print(json.dumps({"status": "error", "message": "Pipeline échoué"}))
         sys.exit(1)
 
 if __name__ == "__main__":

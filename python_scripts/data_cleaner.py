@@ -34,7 +34,7 @@ class GroqLLM:
             
             api_key = os.environ.get("GROQ_API_KEY")
             if not api_key:
-                print("⚠️  GROQ_API_KEY not defined (type detection without LLM)", file=sys.stderr)
+                print("⚠️  GROQ_API_KEY non définie (détection de types sans LLM)", file=sys.stderr)
                 return
             
             self.client = Groq(api_key=api_key)

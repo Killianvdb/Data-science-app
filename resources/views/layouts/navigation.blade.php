@@ -20,6 +20,10 @@
                             {{ __('Clean My Data') }}
                         </x-nav-link>
 
+                        <x-nav-link :href="route('visualise.index')" :active="request()->routeIs('visualise.*')">
+                            {{ __('Visualisation') }}
+                        </x-nav-link>
+
                         <x-nav-link :href="route('datasets.files')" :active="request()->routeIs('datasets.files')">
                             {{ __('My Datasets') }}
                         </x-nav-link>
@@ -40,6 +44,18 @@
                     <x-nav-link :href="route('contact')" :active="request()->routeIs('contact')">
                         {{ __('Contact Us') }}
                     </x-nav-link>
+
+                    <x-nav-link :href="route('pricing')" :active="request()->routeIs('pricing')">
+                        {{ __('Pricing') }}
+                    </x-nav-link>
+
+
+                    @if(auth()->check() && auth()->user()->role === 'admin')
+                    <x-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.index')">
+                        {{ __('Admin Panel') }}
+                    </x-nav-link>
+                    @endif
+
                 </div>
             </div>
 

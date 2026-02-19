@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
+use App\Models\Plan;
 
 class RegisteredUserController extends Controller
 {
@@ -37,6 +38,8 @@ class RegisteredUserController extends Controller
             'phone_number' => ['nullable','regex:/^\+?[0-9\s\-]{7,20}$/'],
         ]);
 
+        $free = Plan::where('slug','free')->firstOrFail();
+
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
@@ -45,6 +48,8 @@ class RegisteredUserController extends Controller
             'user_type' => $request->user_type,
             'phone_number' => $request->phone_number,
             'is_active' => true,
+            'plan_id' => $free->id,
+            'files_used_this_month' => 0,
         ]);
 
         event(new Registered($user));
