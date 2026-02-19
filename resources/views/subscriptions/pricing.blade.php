@@ -39,7 +39,7 @@
 
                         <ul class="mt-6 text-sm text-gray-700 space-y-2">
                             <li>Files/month: {{ $plan->monthly_limit ?? 'Unlimited (fair use)' }}</li>
-                            <li>Max file size: {{ $plan->max_file_size_mb }} MB</li>
+                            <li>Max file size: {{ $plan->max_total_mb_per_transaction }} MB</li>
                             <li>Files/transaction: {{ $plan->max_files_per_transaction }}</li>
                         </ul>
 
