@@ -1,0 +1,41 @@
+{
+  "description": "R\u00e8gles m\u00e9tier pour le dataset orders",
+  "rules": [
+    {
+      "rule_id": "price_positive",
+      "description": "UnitPrice doit \u00eatre positif",
+      "type": "range",
+      "column": "UnitPrice",
+      "condition": "df['UnitPrice'] < 0",
+      "fix_action": "abs",
+      "fix_value": null
+    },
+    {
+      "rule_id": "total_positive",
+      "description": "TotalAmount doit \u00eatre positif",
+      "type": "range",
+      "column": "TotalAmount",
+      "condition": "df['TotalAmount'] < 0",
+      "fix_action": "abs",
+      "fix_value": null
+    },
+    {
+      "rule_id": "delivery_after_order",
+      "description": "DeliveryDate doit \u00eatre >= OrderDate",
+      "type": "cross_column",
+      "column": "DeliveryDate",
+      "condition": "pd.to_datetime(df['DeliveryDate'], errors='coerce') < pd.to_datetime(df['OrderDate'], errors='coerce')",
+      "fix_action": "flag",
+      "fix_value": null
+    },
+    {
+      "rule_id": "quantity_positive",
+      "description": "Quantity doit \u00eatre > 0",
+      "type": "range",
+      "column": "Quantity",
+      "condition": "df['Quantity'].notna() & (df['Quantity'] <= 0)",
+      "fix_action": "null",
+      "fix_value": null
+    }
+  ]
+}
