@@ -51,6 +51,8 @@ services:
         condition: service_healthy
     command: >
       sh -c "
+        echo '🔗 Creating storage symlink...' &&
+        php artisan storage:link || true &&
         if [ -z \"$$APP_KEY\" ] || [ \"$$APP_KEY\" = \"base64:\" ]; then
           echo '🔑 Generating APP_KEY...';
           php artisan key:generate --force --no-interaction;
