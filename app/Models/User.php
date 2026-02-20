@@ -9,7 +9,7 @@ use Illuminate\Notifications\Notifiable;
 use App\Models\Plan;
 
 
-$free = Plan::where('slug','free')->first();
+## $free = Plan::where('slug','free')->first();
 
 class User extends Authenticatable
 {
