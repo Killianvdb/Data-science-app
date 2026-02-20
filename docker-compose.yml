@@ -43,6 +43,7 @@ services:
       QUEUE_CONNECTION: database
       GROQ_API_KEY: ${GROQ_API_KEY:-}
     volumes:
+      - .:/app 
       - ./storage/app/shared_data:/shared_data
       - /var/run/docker.sock:/var/run/docker.sock  
 
@@ -75,7 +76,7 @@ services:
     restart: unless-stopped
     environment:
       PYTHONUNBUFFERED: 1
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY}
       DATABASE_URL: postgresql://${DB_USERNAME:-appuser}:${DB_PASSWORD}@postgres:5432/${DB_DATABASE:-laravel}
     volumes:
       - ./storage/app/shared_data:/shared_data
