@@ -14,7 +14,13 @@ class SubscriptionController extends Controller
     public function index()
     {
         $plans = Plan::orderBy('price')->get();
-        return view('subscriptions.pricing', compact('plans'));
+
+        /** @var User $user */
+        $user = Auth::user();
+
+        $currentPlanId = $user?->plan_id;
+
+        return view('subscriptions.pricing', compact('plans', 'currentPlanId'));
     }
 
     public function change(Request $request)
