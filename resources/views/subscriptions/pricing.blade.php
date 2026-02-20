@@ -16,14 +16,21 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             @foreach($plans as $plan)
 
+            @php
+                $isCurrent = ($currentPlanId ?? null) === $plan->id;
+            @endphp
+
                 <form method="POST" action="{{ route('subscription.change') }}">
                     @csrf
                     <input type="hidden" name="plan_slug" value="{{ $plan->slug }}">
 
                     <button type="submit"
-                        class="w-full text-left bg-white border-4 border-indigo-200 rounded-2xl p-6
-                            shadow-sm hover:shadow-lg hover:-translate-y-1
-                            hover:border-indigo-500 transition-all duration-300">
+                        @if($isCurrent) disabled @endif
+                        class="w-full text-left rounded-2xl p-6 border-4 transition-all duration-300
+                            {{ $isCurrent
+                                ? 'bg-indigo-50 border-indigo-600 shadow-md cursor-default pointer-events-none'
+                                : 'bg-white border-indigo-200 shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-indigo-500'
+                            }}">
 
                         <h3 class="text-xl font-bold text-center text-gray-900">
                             {{ $plan->name }}
@@ -44,9 +51,15 @@
                         </ul>
 
                         <div class="mt-6 text-center">
-                            <span class="inline-block bg-indigo-600 text-white px-4 py-2 rounded-xl">
-                                Choose {{ $plan->name }}
-                            </span>
+                            @if($isCurrent)
+                                <span class="inline-block bg-gray-400 text-white px-4 py-2 rounded-xl">
+                                    Current plan
+                                </span>
+                            @else
+                                <span class="inline-block bg-indigo-600 text-white px-4 py-2 rounded-xl">
+                                    Choose {{ $plan->name }}
+                                </span>
+                            @endif
                         </div>
 
                     </button>
