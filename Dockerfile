@@ -17,6 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 2. Install PHP extensions
 RUN docker-php-ext-install pdo pdo_pgsql zip opcache bcmath mbstring gd intl
 
+RUN apt-get update && apt-get install -y docker.io && rm -rf /var/lib/apt/lists/*
+
+
 # 3. Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 

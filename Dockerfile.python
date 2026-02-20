@@ -2,12 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 1. Install build dependencies (temporary)
+# 1. Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Copy requirements FIRST (cache optimization)
+# 2. Copy requirements from root
 COPY requirements.txt .
 
 # 3. Install Python packages
@@ -15,5 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 4. Remove build dependencies (save ~200MB)
 RUN apt-get purge -y --auto-remove build-essential 2>/dev/null || true
+
+# 5. Copy Python scripts into the image
+COPY python_scripts/ /app/
 
 CMD ["tail", "-f", "/dev/null"]

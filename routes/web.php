@@ -25,7 +25,6 @@ Route::get('/how-it-works', fn() => view('how-it-works'))->name('how-it-works');
 Route::get('/contact', fn() => view('contact'))->name('contact');
 Route::post('/contact', [ContactController::class, 'submit'])->name('contact.submit');
 
-
 /*
 |--------------------------------------------------------------------------
 | Authenticated Routes
@@ -34,10 +33,10 @@ Route::post('/contact', [ContactController::class, 'submit'])->name('contact.sub
 
 Route::middleware('auth')->group(function () {
 
-// Visualization Routes
+    // Visualization Routes
     Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
     Route::post('/visualise/generate', [VisualizationController::class, 'generate'])->name('visualise.generate');
-    Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show'); // Added this!
+    Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show');
 
     // Profile Management
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -47,40 +46,41 @@ Route::middleware('auth')->group(function () {
     Route::get('/upload', [UploadController::class, 'create'])->name('upload.create');
     Route::post('/upload', [UploadController::class, 'store'])->name('upload.store');
 
-
     Route::prefix('datasets')->name('datasets.')->group(function () {
-
         // Pages
         Route::get('/', [DatasetController::class, 'index'])->name('index')->middleware('verified');
+        Route::get('/files', [DatasetController::class, 'showFiles'])->name('files');
 
-        // Actions
+        // File Upload & Processing
         Route::post('/upload', [DatasetController::class, 'upload'])->name('upload');
         Route::post('/batch-upload', [DatasetController::class, 'batchUpload'])->name('batchUpload');
 
-        // File Management
-        Route::get('/files', [DatasetController::class, 'showFiles'])->name('files');
+        // File Download
         Route::get('/download/{filename}/{alias?}', [DatasetController::class, 'download'])->name('download');
+
+        // Optional: Add these new routes for better UX
+        // API endpoint to check processing status (if you implement async processing later)
+        // Route::get('/status/{jobId}', [DatasetController::class, 'checkStatus'])->name('status');
+        
+        // API endpoint to get file metadata
+        // Route::get('/metadata/{filename}', [DatasetController::class, 'getMetadata'])->name('metadata');
     });
 
-    //payments and subscriptions
+    // Payments and subscriptions
     Route::get('/pricing', [SubscriptionController::class, 'index'])->name('pricing');
     Route::post('/subscription/change', [SubscriptionController::class, 'change'])->name('subscription.change');
 
-
-/*
-|--------------------------------------------------------------------------
-| Admin Routes
-|--------------------------------------------------------------------------
-*/
-
-Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function(){
-    Route::get('users', [UserController::class,'index'])->name('users.index');
-    Route::patch('users/{user}/role', [UserController::class,'updateRole'])->name('users.updateRole');
-    Route::delete('users/{user}', [UserController::class,'destroy'])->name('users.destroy');
-    Route::get('users/search', [UserController::class,'search'])->name('users.search');
-});
-
-
+    /*
+    |--------------------------------------------------------------------------
+    | Admin Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function(){
+        Route::get('users', [UserController::class,'index'])->name('users.index');
+        Route::patch('users/{user}/role', [UserController::class,'updateRole'])->name('users.updateRole');
+        Route::delete('users/{user}', [UserController::class,'destroy'])->name('users.destroy');
+        Route::get('users/search', [UserController::class,'search'])->name('users.search');
+    });
 });
 
 require __DIR__.'/auth.php';

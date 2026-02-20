@@ -14,7 +14,7 @@ services:
     networks:
       - datasci_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-appuser}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-appuser} -d ${DB_DATABASE:-laravel}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,6 +44,8 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
     volumes:
       - ./storage/app/shared_data:/shared_data
+      - /var/run/docker.sock:/var/run/docker.sock  
+
     networks:
       - datasci_net
     depends_on:
@@ -76,7 +78,6 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       DATABASE_URL: postgresql://${DB_USERNAME:-appuser}:${DB_PASSWORD}@postgres:5432/${DB_DATABASE:-laravel}
     volumes:
-      - ./python_scripts:/app:ro
       - ./storage/app/shared_data:/shared_data
     networks:
       - datasci_net
