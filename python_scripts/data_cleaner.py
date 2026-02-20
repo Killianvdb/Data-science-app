@@ -357,22 +357,26 @@ class DataCleaner:
         self.row_threshold = row_threshold
         self.col_threshold = col_threshold
         self.df = self._load_file(file_path)
+
+    
     
     def _load_file(self, path):
         """Charge un fichier (CSV, Excel, JSON, XML)"""
         ext = os.path.splitext(path)[-1].lower()
         
         try:
+            df = None
+            
             if ext in ['.xlsx', '.xls']:
                 sheets = pd.read_excel(path, sheet_name=None)
-                return pd.concat(sheets.values(), ignore_index=True)
+                df = pd.concat(sheets.values(), ignore_index=True)
             
             elif ext == '.json':
                 with open(path, 'r') as f:
-                    return pd.json_normalize(json.load(f))
+                    df = pd.json_normalize(json.load(f))
             
             elif ext == '.xml':
-                return pd.read_xml(path)
+                df = pd.read_xml(path)
             
             elif ext in ['.txt', '.csv']:
                 encodings = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252', 'utf-16']
@@ -380,23 +384,34 @@ class DataCleaner:
                 for encoding in encodings:
                     try:
                         df = pd.read_csv(path, sep=None, engine='python',
-                                       encoding=encoding, on_bad_lines='skip')
+                                    encoding=encoding, on_bad_lines='skip')
                         print(f"✅ Chargé avec encoding: {encoding}", file=sys.stderr)
-                        return df
+                        break
                     except UnicodeDecodeError:
                         continue
                     except Exception:
                         try:
                             df = pd.read_csv(path, encoding=encoding, on_bad_lines='skip')
                             print(f"✅ Load with encoding: {encoding}", file=sys.stderr)
-                            return df
+                            break
                         except:
                             continue
                 
-                raise ValueError("Impossible de lire le fichier avec tous les encodings testés")
+                if df is None:
+                    raise ValueError("Impossible de lire le fichier avec tous les encodings testés")
             
             else:
                 raise ValueError(f"Format non supporté: {ext}")
+            
+            if df is not None:
+                for col in df.columns:
+                    if df[col].dtype == 'object':  # Colonnes texte
+                        # Strip espaces + apostrophes invisibles
+                        df[col] = df[col].astype(str).str.strip().str.lstrip("'")
+                        # Remplace les string "nan" par de vrais NULL
+                        df[col] = df[col].replace(['nan', 'NaN', 'None', ''], np.nan)
+            
+            return df
         
         except Exception as e:
             raise ValueError(f"Erreur chargement: {str(e)}")
