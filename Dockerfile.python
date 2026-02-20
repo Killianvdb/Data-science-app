@@ -2,19 +2,21 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install build tools for C-based extensions (like parts of pandas/numpy)
-RUN apt-get update && apt-get install -y \
+# 1. Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file from your project root into the container
+# 2. Copy requirements from root
 COPY requirements.txt .
 
-# Install the actual libraries
+# 3. Install Python packages
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create the user
-RUN useradd -m datauser
-USER datauser
+# 4. Remove build dependencies (save ~200MB)
+RUN apt-get purge -y --auto-remove build-essential 2>/dev/null || true
+
+# 5. Copy Python scripts into the image
+COPY python_scripts/ /app/
 
 CMD ["tail", "-f", "/dev/null"]
