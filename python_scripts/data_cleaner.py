@@ -214,10 +214,7 @@ def clean_basic(df, row_thresh=0.5, col_thresh=0.3):
     return df
 
 def clean_dates(df, decisions):
-    """
-    Convertit les colonnes dates avec détection automatique du format.
-    Les NULL restants sont laissés tels quels (pas d'imputation).
-    """
+    """Convertit les colonnes dates avec détection automatique du format"""
     date_columns = {}
     
     for col, decision in decisions.items():
@@ -232,12 +229,14 @@ def clean_dates(df, decisions):
                 print(f"      ⚠️  Empty column, ignored", file=sys.stderr)
                 continue
             
+            # Tester plusieurs formats (ordre important: plus spécifique d'abord)
             formats_to_test = [
                 ('%Y-%m-%d', 'YYYY-MM-DD'),
-                ('%d/%m/%Y', 'DD/MM/YYYY'),
+                ('%d/%m/%Y', 'DD/MM/YYYY'),       # ← AVANT MM/DD
                 ('%m/%d/%Y', 'MM/DD/YYYY'),
                 ('%Y/%m/%d', 'YYYY/MM/DD'),
                 ('%d-%m-%Y', 'DD-MM-YYYY'),
+                ('%m-%d-%Y', 'MM-DD-YYYY'),
                 (None, 'Auto (pandas)'),
             ]
             
@@ -248,7 +247,7 @@ def clean_dates(df, decisions):
             for fmt, name in formats_to_test:
                 try:
                     if fmt is None:
-                        test_result = pd.to_datetime(sample, errors='coerce')
+                        test_result = pd.to_datetime(sample, errors='coerce', dayfirst=True)  # ← dayfirst=True
                     else:
                         test_result = pd.to_datetime(sample, format=fmt, errors='coerce')
                     success_rate = test_result.notna().sum() / len(sample)
@@ -260,16 +259,17 @@ def clean_dates(df, decisions):
                     best_format = fmt
                     best_name = name
             
-            print(f"      Selected format: {best_name} ({best_success_rate*100:.1f}% succes)", file=sys.stderr)
+            print(f"      Selected format: {best_name} ({best_success_rate*100:.1f}% success)", file=sys.stderr)
             
+            # Convertir toute la colonne
             if best_format is None:
-                df[col] = pd.to_datetime(df[col], errors='coerce')
+                df[col] = pd.to_datetime(df[col], errors='coerce', dayfirst=True)
             else:
                 df[col] = pd.to_datetime(df[col], format=best_format, errors='coerce')
             
             failed = df[col].isna().sum()
             if failed > 0:
-                print(f"      ⚠️ {failed} invalid dates → left NULL (imputation in cross_reference)", file=sys.stderr)
+                print(f"      ⚠️ {failed} invalid dates → left NULL", file=sys.stderr)
             
             if df[col].notna().sum() > 0:
                 date_columns[col] = df[col].copy()
@@ -282,7 +282,7 @@ def clean_dates(df, decisions):
 def clean_prices(df):
     """
     Conversion robuste des colonnes monétaires.
-    25,50 → 25.50 / 1 200€ → 1200 / $30.00 → 30.00
+    USD 25.50 → 25.50 / 1 200€ → 1200 / Free → 0
     """
     price_keywords = [
         'price', 'cost', 'amount', 'value',
@@ -296,13 +296,26 @@ def clean_prices(df):
         if any(keyword in col_lower for keyword in price_keywords):
             print(f"   💵 Price detected: {col}", file=sys.stderr)
 
-            df[col] = (
-                df[col]
-                .astype(str)
-                .str.replace(r'[€$£¥₹]', '', regex=True)
-                .str.replace(r'\s', '', regex=True)
-                .str.replace(',', '.', regex=False)
-            )
+            # Convertir en string d'abord
+            df[col] = df[col].astype(str)
+            
+            # Remplacer "Free" par 0
+            df[col] = df[col].str.replace('Free', '0', case=False, regex=False)
+            df[col] = df[col].str.replace('free', '0', case=False, regex=False)
+            
+            # Supprimer les symboles monétaires et "USD", "EUR", etc.
+            df[col] = df[col].str.replace(r'USD\s*', '', regex=True, case=False)
+            df[col] = df[col].str.replace(r'EUR\s*', '', regex=True, case=False)
+            df[col] = df[col].str.replace(r'GBP\s*', '', regex=True, case=False)
+            df[col] = df[col].str.replace(r'[€$£¥₹]', '', regex=True)
+            
+            # Supprimer les espaces
+            df[col] = df[col].str.replace(r'\s', '', regex=True)
+            
+            # Remplacer virgule par point
+            df[col] = df[col].str.replace(',', '.', regex=False)
+            
+            # Convertir en numérique
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
     return df
@@ -339,6 +352,10 @@ def handle_negatives(df, decisions):
                 df.loc[df[col] < 0, col] = df.loc[df[col] < 0, col].abs()
     
     return df
+
+
+
+    
 
 # ============================================================================
 # MAIN CLEANER CLASS
@@ -403,13 +420,23 @@ class DataCleaner:
             else:
                 raise ValueError(f"Format non supporté: {ext}")
             
+            # ✅ NETTOYAGE GLOBAL amélioré
             if df is not None:
                 for col in df.columns:
                     if df[col].dtype == 'object':  # Colonnes texte
-                        # Strip espaces + apostrophes invisibles
-                        df[col] = df[col].astype(str).str.strip().str.lstrip("'")
-                        # Remplace les string "nan" par de vrais NULL
-                        df[col] = df[col].replace(['nan', 'NaN', 'None', ''], np.nan)
+                        # Convertir en string et nettoyer
+                        df[col] = df[col].astype(str)
+                        
+                        # Strip espaces (AVANT et APRÈS)
+                        df[col] = df[col].str.strip()
+                        
+                        # Retire apostrophes invisibles
+                        df[col] = df[col].str.lstrip("'")
+                        
+                        # Remplace les string "nan", "NaN", "None", "" par NULL
+                        df[col] = df[col].replace(['nan', 'NaN', 'None', '', 'null', 'NULL', 'Null'], np.nan)
+                        
+                print(f"✅ Global cleaning applied", file=sys.stderr)
             
             return df
         
@@ -424,6 +451,7 @@ class DataCleaner:
         3. Conversion des dates
         4. Conversion des prix
         5. Correction des négatifs
+        6. Validation des ratings
         
         ❌ PAS d'imputation des NULL
         ❌ PAS de recalcul de colonnes dérivées
@@ -461,16 +489,21 @@ class DataCleaner:
         
         # 5. Convertir les prix
         self.df = clean_prices(self.df)
+        for col in self.df.columns:
+            if self.df[col].dtype == 'object':
+                self.df[col] = self.df[col].str.strip()
         
         # 6. Corriger les négatifs
         self.df = handle_negatives(self.df, decisions)
         
-        # 7. Réintégrer les dates (format ISO)
+
+        
+        # 8. Réintégrer les dates (format ISO)
         for col, date_series in date_columns.items():
             self.df[col] = date_series.dt.strftime('%Y-%m-%d')
             print(f"   ✅ Date re-integrated: {col}", file=sys.stderr)
         
-        # 8. Restaurer l'ordre original des colonnes
+        # 9. Restaurer l'ordre original des colonnes
         available_columns = [col for col in original_column_order if col in self.df.columns]
         self.df = self.df[available_columns]
         
