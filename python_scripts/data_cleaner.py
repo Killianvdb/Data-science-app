@@ -420,6 +420,9 @@ class DataCleaner:
         print(f"{'='*60}", file=sys.stderr)
         print(f"Rows: {len(self.df)}, Columns: {len(self.df.columns)}", file=sys.stderr)
         
+        # 0. Sauvegarde l'ordre original des colonnes
+        original_column_order = self.df.columns.tolist()
+        
         # 1. Nettoyage de base
         self.df = clean_basic(self.df, self.row_threshold, self.col_threshold)
         
@@ -451,6 +454,10 @@ class DataCleaner:
         for col, date_series in date_columns.items():
             self.df[col] = date_series.dt.strftime('%Y-%m-%d')
             print(f"   ✅ Date re-integrated: {col}", file=sys.stderr)
+        
+        # 8. Restaurer l'ordre original des colonnes
+        available_columns = [col for col in original_column_order if col in self.df.columns]
+        self.df = self.df[available_columns]
         
         # Résumé des NULL restants (pour info, pas d'action)
         null_summary = self.df.isna().sum()
