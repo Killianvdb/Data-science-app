@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Auth;
 
-
 class DatasetController extends Controller
 {
     protected $cleaningService;
@@ -25,40 +24,32 @@ class DatasetController extends Controller
     /**
      * Show the upload form
      */
-
     public function index()
     {
         $supportedFormats = $this->cleaningService->getSupportedFormats();
         $datasets = Dataset::where('user_id', Auth::id())->get();
-
         $planSlug = Auth::user()->plan?->slug;
 
         return view('datasets.index', compact('supportedFormats', 'planSlug'));
     }
 
-
     /**
-     * Handle file upload and cleaning
+     * Handle file upload with optional cross-reference
      */
     public function upload(Request $request)
     {
-        // 1. Validate the input
         $request->validate([
-            //'file' => 'required|file|mimes:xlsx,xls,csv,txt,json,xml|max:20480', // 20MB limit
-            'row_threshold' => 'nullable|numeric|min:0|max:1',
-            'col_threshold' => 'nullable|numeric|min:0|max:1',
-            'imputation_type' => 'nullable|string|in:RDF,KNN,mean,median,most_frequent',
-            'special_characters' => 'nullable|string',
-            'action' => 'nullable|string|in:add,remove',
+            'file' => 'required|file|mimes:xlsx,xls,csv,txt,json,xml|max:20480',
+            'reference_files.*' => 'nullable|file|mimes:xlsx,xls,csv|max:10240',
+            'pipeline_mode' => 'nullable|string|in:clean_only,full_pipeline',
+            'use_llm_enricher' => 'nullable|boolean',
+            'rules_file' => 'nullable|file|mimes:json|max:1024',
         ]);
 
         try {
-            $file = $request->file('file');
-
             /** @var \App\Models\User $user */
             $user = Auth::user();
             $plan = $user->plan;
-
 
             if (!$plan) {
                 return response()->json([
@@ -67,109 +58,159 @@ class DatasetController extends Controller
                 ], 403);
             }
 
-
+            $file = $request->file('file');
             $maxTotalBytes = $plan->max_total_mb_per_transaction * 1024 * 1024;
-
             $isPro = $user->plan?->slug === 'pro';
 
             if ($file->getSize() > $maxTotalBytes) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => $isPro ? 'This file exceeds the current Pro max size (20MB). Contact support if you need a higher limit.'
-                    : 'File exceeds maximum size for your plan.'
+                    'message' => $isPro 
+                        ? 'This file exceeds the current Pro max size (20MB). Contact support if you need a higher limit.'
+                        : 'File exceeds maximum size for your plan.'
                 ], 403);
             }
-
 
             if (!$user->canUpload(1)) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => $isPro ? 'You reached our fair-use security limit. Please contact support to increase it.'
-                     : 'Monthly limit reached. Please upgrade your plan.'
+                    'message' => $isPro 
+                        ? 'You reached our fair-use security limit. Please contact support to increase it.'
+                        : 'Monthly limit reached. Please upgrade your plan.'
                 ], 403);
             }
 
-            // 2. Store the file with a hashed name (Security)
-            //$storagePath = $file->store('data_mission');
-            $storagePath = $file->store('data_mission/' . Auth::id());
+            // Store main file in shared_data for Docker access
+            $userId = Auth::id();
+            $uploadDir = '/shared_data/uploads/' . $userId;
+            
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0777, true);
+            }
 
+            $mainFileName = time() . '_' . $file->getClientOriginalName();
+            $mainFilePath = $uploadDir . '/' . $mainFileName;
+            $file->move($uploadDir, $mainFileName);
+            @chmod($mainFilePath, 0666);
 
-            // 3. Build the options array to pass to Python
+            // Handle reference files if provided
+            $referenceFiles = [];
+            if ($request->hasFile('reference_files')) {
+                foreach ($request->file('reference_files') as $refFile) {
+                    $refFileName = time() . '_ref_' . $refFile->getClientOriginalName();
+                    $refFilePath = $uploadDir . '/' . $refFileName;
+                    $refFile->move($uploadDir, $refFileName);
+                    @chmod($refFilePath, 0666);
+                    $referenceFiles[] = $refFilePath;
+                }
+            }
+
+            // Options
             $options = [
-                'row_threshold' => (float) ($request->input('row_threshold', 0.8)),
-                'col_threshold' => (float) ($request->input('col_threshold', 0.8)),
-                'imputation_type' => $request->input('imputation_type', 'RDF'),
+                'no_llm_enricher' => !$request->boolean('use_llm_enricher', true)
             ];
 
-            // Convert the comma-separated string from the UI into a Python-friendly array
-            if ($request->filled('special_characters')) {
-                // Clean up whitespace and split by comma
-                $chars = array_map('trim', explode(',', $request->special_characters));
-                $options['special_character'] = $chars;
+            // Handle rules file if provided
+            if ($request->hasFile('rules_file')) {
+                $rulesFile = $request->file('rules_file');
+                $rulesFileName = 'rules_' . time() . '.json';
+                $rulesPath = $uploadDir . '/' . $rulesFileName;
+                $rulesFile->move($uploadDir, $rulesFileName);
+                @chmod($rulesPath, 0666);
+                $options['rules_file'] = $rulesPath;
             }
 
-            if ($request->filled('action')) {
-                $options['action'] = $request->action;
+            // Determine pipeline mode
+            $pipelineMode = $request->input('pipeline_mode', 'full_pipeline');
+
+            if ($pipelineMode === 'clean_only' || empty($referenceFiles)) {
+                // Clean only mode
+                $result = $this->cleaningService->cleanUploadedFile($mainFilePath, $options);
+            } else {
+                // Full pipeline with cross-reference
+                $result = $this->cleaningService->runFullPipeline($mainFilePath, $referenceFiles, $options);
             }
 
-            // 4. Run the cleaning service
-            $result = $this->cleaningService->cleanUploadedFile($storagePath, $options);
-
-
+            // Increment usage counter
             User::where('id', $user->id)->increment('files_used_this_month', 1);
 
-            // 5. Return success with the download URL
+            // Build download URLs
+            $downloadUrls = [];
+            if (!empty($result['cleaned_file_path'])) {
+                $downloadUrls['cleaned'] = route('datasets.download', [
+                    'filename' => basename($result['cleaned_file_path'])
+                ]);
+            }
+            if (!empty($result['enriched_file'])) {
+                $downloadUrls['enriched'] = route('datasets.download', [
+                    'filename' => basename($result['enriched_file'])
+                ]);
+            }
+            if (!empty($result['report_file'])) {
+                $downloadUrls['report'] = route('datasets.download', [
+                    'filename' => basename($result['report_file'])
+                ]);
+            }
+
             return response()->json([
                 'status' => 'success',
-                'message' => 'File cleaned and converted successfully!',
+                'message' => 'File processed successfully!',
                 'data' => $result,
-                'download_url' => route('datasets.download', [
-                    'filename' => basename($result['cleaned_file_path'])
-                ])
+                'download_urls' => $downloadUrls,
+                'pipeline_mode' => $pipelineMode
             ]);
 
         } catch (\Exception $e) {
+            Log::error('Upload failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to clean file: ' . $e->getMessage()
+                'message' => 'Failed to process file: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Download cleaned file
+     * Download cleaned/enriched file
      */
+    public function download(Request $request, $filename)
+    {
+        $userId = Auth::id() ?? 'shared';
+        
+        // Check in multiple possible locations
+        $possiblePaths = [
+            '/shared_data/cleaned/' . $userId . '/' . $filename,    // ← FIX
+            '/shared_data/results/' . $userId . '/' . $filename,    // ← FIX
+        ];
+        $path = null;
+        foreach ($possiblePaths as $possiblePath) {
+            if (file_exists($possiblePath)) {
+                $path = $possiblePath;
+                break;
+            }
+        }
 
-   public function download(Request $request, $filename)
-{
-    $userId = Auth::id() ?? 'shared';
-    
-    // 2. Point to the SAME private folder here
-    $path = storage_path('app/private/cleaned/' . $userId . '/' . $filename);
-     
-      $alias = $request->route('alias') ?? 'cleaned_data.csv';
+        if (!$path) {
+            abort(404, 'File not found: ' . $filename);
+        }
 
-    if (!file_exists($path)) {
-        abort(404, 'File not found at: ' . $path);
+        $alias = $request->route('alias') ?? basename($filename);
+
+        return response()->download($path, $alias);
     }
-
-    return response()->download($path);
-}       
 
     /**
      * Handle batch upload
      */
     public function batchUpload(Request $request)
     {
-
-    //dd($request->all(), $request->file('files'));
-
         $validator = Validator::make($request->all(), [
             'files' => 'required|array|min:1',
             'files.*' => 'required|file|max:51200',
-            'row_threshold' => 'nullable|numeric|min:0|max:1',
-            'col_threshold' => 'nullable|numeric|min:0|max:1',
-            'imputation_type' => 'nullable|string|in:RDF,KNN,mean,median,most_frequent',
+            'use_llm_enricher' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -181,8 +222,6 @@ class DatasetController extends Controller
         }
 
         try {
-            $storagePaths = [];
-
             /** @var \App\Models\User $user */
             $user = Auth::user();
             $plan = $user->plan;
@@ -195,43 +234,48 @@ class DatasetController extends Controller
             }
 
             $files = $request->file('files');
-
             $isPro = $user->plan?->slug === 'pro';
-
 
             if (count($files) > $plan->max_files_per_transaction) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => $isPro ? 'You reached the Pro batch limit (10 files per upload). Contact support for enterprise limits.'
-                    : 'Too many files for your current plan.'
+                    'message' => $isPro 
+                        ? 'You reached the Pro batch limit (10 files per upload). Contact support for enterprise limits.'
+                        : 'Too many files for your current plan.'
                 ], 403);
             }
-
 
             if (!$user->canUpload(count($files))) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => $isPro ? 'You reached our fair-use security limit. Please contact support to increase it.'
-                     : 'Monthly limit reached. Please upgrade your plan.'
+                    'message' => $isPro 
+                        ? 'You reached our fair-use security limit. Please contact support to increase it.'
+                        : 'Monthly limit reached. Please upgrade your plan.'
                 ], 403);
             }
 
-            $totalBytes = 0;
-            foreach ($files as $file) {
-                $totalBytes += $file->getSize();
-            }
-
+            // Validate total size
+            $totalBytes = array_sum(array_map(fn($f) => $f->getSize(), $files));
             $maxTotalBytes = $plan->max_total_mb_per_transaction * 1024 * 1024;
 
             if ($totalBytes > $maxTotalBytes) {
                 return response()->json([
                     'status' => 'error',
                     'message' => $isPro
-                    ? 'You reached the Pro upload size limit. Contact support for higher limits.'
-                    : 'Total upload size exceeds the maximum allowed for your plan.'
+                        ? 'You reached the Pro upload size limit. Contact support for higher limits.'
+                        : 'Total upload size exceeds the maximum allowed for your plan.'
                 ], 403);
             }
 
+            // Store files in shared_data
+            $userId = Auth::id();
+            $uploadDir = '/shared_data/uploads/' . $userId;
+            
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0777, true);
+            }
+
+            $storagePaths = [];
             $invalidFiles = [];
 
             foreach ($files as $file) {
@@ -240,7 +284,11 @@ class DatasetController extends Controller
                     continue;
                 }
 
-                $storagePaths[] = $file->store('data_mission/' . Auth::id());
+                $fileName = time() . '_' . $file->getClientOriginalName();
+                $filePath = $uploadDir . '/' . $fileName;
+                $file->move($uploadDir, $fileName);
+                @chmod($filePath, 0666);
+                $storagePaths[] = $filePath;
             }
 
             if (!empty($invalidFiles)) {
@@ -251,19 +299,11 @@ class DatasetController extends Controller
                 ], 422);
             }
 
-            $options = [];
-            if ($request->filled('row_threshold')) {
-                $options['row_threshold'] = (float) $request->row_threshold;
-            }
-            if ($request->filled('col_threshold')) {
-                $options['col_threshold'] = (float) $request->col_threshold;
-            }
-            if ($request->filled('imputation_type')) {
-                $options['imputation_type'] = $request->imputation_type;
-            }
+            $options = [
+                'no_llm_enricher' => !$request->boolean('use_llm_enricher', true)
+            ];
 
             $results = $this->cleaningService->cleanBatch($storagePaths, $options);
-
 
             User::where('id', $user->id)->increment('files_used_this_month', count($files));
 
@@ -274,6 +314,11 @@ class DatasetController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            Log::error('Batch upload failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'We could not process your files: ' . $e->getMessage()
@@ -282,54 +327,54 @@ class DatasetController extends Controller
     }
 
     /**
-     * List all cleaned files
+     * Show all processed files
      */
-    public function listCleaned()
-    {
-        //$files = Storage::files('cleaned_output');
-        $files = Storage::files('cleaned_output/' . Auth::id());
-
-
-        $fileList = array_map(function($file) {
-            return [
-                'name' => basename($file),
-                'size' => Storage::size($file),
-                'modified' => Storage::lastModified($file),
-                'download_url' => route('datasets.download', ['filename' => basename($file)])
-            ];
-        }, $files);
-
-        return response()->json([
-            'status' => 'success',
-            'files' => $fileList
-        ]);
-    }
-
     public function showFiles()
     {
-        // Try reading directly from the filesystem instead
-        //$path = storage_path('app/cleaned_output');
-        $path = storage_path('app/cleaned/' . Auth::id());
+        $userId = Auth::id();
+            $paths = [
+            '/shared_data/cleaned/' . $userId,      // ← FIX
+            '/shared_data/results/' . $userId,      // ← FIX
+        ];
 
-        if (!is_dir($path)) {
-            mkdir($path, 0755, true);
+        $fileList = [];
+
+        foreach ($paths as $path) {
+            if (!is_dir($path)) {
+                continue;
+            }
+
+            $files = File::files($path);
+
+            foreach ($files as $file) {
+                $fileList[] = [
+                    'name' => $file->getFilename(),
+                    'size' => round($file->getSize() / 1024, 2) . ' KB',
+                    'modified' => \Carbon\Carbon::createFromTimestamp($file->getMTime())->diffForHumans(),
+                    'type' => $this->getFileType($file->getFilename()),
+                    'download_url' => route('datasets.download', [
+                        'filename' => $file->getFilename(),
+                        'alias' => basename($file)
+                    ])
+                ];
+            }
         }
-
-        $files = File::files($path); // Use File facade instead of Storage
-
-        $fileList = array_map(function($file) {
-            return [
-                'name' => $file->getFilename(),
-                'size' => round($file->getSize() / 1024, 2) . ' KB',
-                'modified' => \Carbon\Carbon::createFromTimestamp($file->getMTime())->diffForHumans(),
-                'download_url' => route('datasets.download', [
-                    'filename' => $file->getFilename(),
-                    'alias' => basename($file)
-                ])
-            ];
-        }, $files);
 
         return view('datasets.files', compact('fileList'));
     }
 
+    /**
+     * Determine file type for display
+     */
+    private function getFileType(string $filename): string
+    {
+        if (str_contains($filename, '_CLEANED.csv')) {
+            return 'cleaned';
+        } elseif (str_contains($filename, '_ENRICHED.csv')) {
+            return 'enriched';
+        } elseif (str_contains($filename, '_REPORT.json')) {
+            return 'report';
+        }
+        return 'unknown';
+    }
 }
