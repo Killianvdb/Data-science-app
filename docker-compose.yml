@@ -27,6 +27,7 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+      - "5173:5173"
     environment:
       APP_KEY: ${APP_KEY}
       APP_URL: ${APP_URL:-http://localhost:8000}
@@ -44,7 +45,7 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
     volumes:
       - ./storage/app/shared_data:/shared_data
-      - /var/run/docker.sock:/var/run/docker.sock  
+      - /var/run/docker.sock:/var/run/docker.sock
 
     networks:
       - datasci_net
