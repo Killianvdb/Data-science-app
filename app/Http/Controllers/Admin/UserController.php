@@ -27,7 +27,7 @@ class UserController extends Controller
 {
     $this->authorizeAdmin();
 
-    $query = User::query();
+    $query = User::query()->with('plan:id,name');
 
     if($request->filled('query')) {
         $q = $request->query('query');
@@ -55,8 +55,16 @@ class UserController extends Controller
         $this->authorizeAdmin();
 
 
+        if ($user->id === 1) {
+            return redirect()->route('admin.users.index')->with('error', 'You cannot delete the primary admin.');
+        }
+
         if (Auth::id() == $user->id) {
             return redirect()->route('admin.users.index')->with('error', 'You cannot delete yourself');
+        }
+
+        if ($user->id === 1) {
+            return response()->json(['error' => 'Cannot change default admin'], 403);
         }
 
 
@@ -72,26 +80,51 @@ class UserController extends Controller
 
     }
 
-public function updateRole(Request $request, User $user)
-{
-    if(Auth::user()->role !== 'admin') {
-        return response()->json(['error'=>'Unauthorized'],403);
+    public function updateRole(Request $request, User $user)
+    {
+        if(Auth::user()->role !== 'admin') {
+            return response()->json(['error'=>'Unauthorized'],403);
+        }
+
+        if($user->id === 1){
+            return response()->json(['error'=>'Cannot change default admin'],403);
+        }
+
+        $role = $request->input('role');
+        if(!in_array($role, ['user','admin'])){
+            return response()->json(['error'=>'Invalid role'],422);
+        }
+
+        $user->role = $role;
+        $user->save();
+
+        return response()->json(['success'=>'Role updated successfully','role'=>$user->role]);
     }
 
-    if($user->id === 1){
-        return response()->json(['error'=>'Cannot change default admin'],403);
+    public function updatePlan(Request $request, User $user)
+    {
+        $this->authorizeAdmin();
+
+        if ($user->id === 1) {
+            return response()->json(['error' => 'Cannot change default admin'], 403);
+        }
+
+        $request->validate([
+            'plan_id' => ['required', 'exists:plans,id'],
+        ]);
+
+        $plan = \App\Models\Plan::findOrFail($request->plan_id);
+
+        $user->plan_id = $plan->id;
+        $user->save();
+
+        return response()->json([
+            'success' => 'Plan updated successfully',
+            'plan_id' => $user->plan_id,
+            'plan_name' => $plan->name,
+        ]);
     }
 
-    $role = $request->input('role');
-    if(!in_array($role, ['user','admin'])){
-        return response()->json(['error'=>'Invalid role'],422);
-    }
-
-    $user->role = $role;
-    $user->save();
-
-    return response()->json(['success'=>'Role updated successfully','role'=>$user->role]);
-}
 
 
 }
