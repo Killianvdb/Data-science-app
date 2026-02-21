@@ -12,6 +12,18 @@
             </div>
         @endif
 
+        @if(session('error'))
+            <div class="mb-4 rounded bg-red-100 px-4 py-3 text-red-800">
+                {{ session('error') }}
+            </div>
+        @endif
+
+        @if(session('success'))
+            <div class="mb-4 rounded bg-green-100 px-4 py-3 text-green-800">
+                {{ session('success') }}
+            </div>
+        @endif
+
         @if($errors->any())
             <div class="p-4 bg-red-100 text-red-800 rounded mb-4">
                 <ul class="list-disc ml-6">
@@ -25,6 +37,48 @@
         <form method="POST" action="{{ route('profile.update') }}" class="space-y-4">
             @csrf
             @method('PATCH')
+
+            <div class="relative bg-indigo-50 border-4 border-indigo-600 rounded-2xl p-6 shadow-md">
+
+                <div class="absolute -top-3 right-4 bg-indigo-600 text-white text-xs font-semibold px-3 py-1 rounded-full shadow">
+                    Current plan
+                </div>
+
+                <h3 class="text-lg font-semibold text-indigo-800 mb-3">
+                    Subscription
+                </h3>
+
+                <div class="flex items-center justify-between flex-wrap gap-3">
+
+                    <div>
+                        <p class="text-gray-800 font-semibold text-lg">
+                            {{ $currentPlan->name }}
+                        </p>
+
+                        <p class="text-gray-500 text-sm">
+                            @if($currentPlan->price == 0)
+                                0€/month
+                            @else
+                                €{{ $currentPlan->price / 100 }}/month
+                            @endif
+                        </p>
+                    </div>
+
+                    @if($currentPlan->price == 0)
+                        <p class="text-xs text-indigo-600 font-medium mt-1">
+                            Upgrade anytime
+                        </p>
+                    @endif
+
+                    <a href="{{ route('pricing') }}"
+                    class="inline-flex items-center px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-medium
+                            hover:bg-indigo-700 transition shadow-sm">
+                        Change plan
+                    </a>
+
+                </div>
+
+            </div>
 
             <div>
                 <label for="name" class="block font-medium text-gray-700">Name</label>
