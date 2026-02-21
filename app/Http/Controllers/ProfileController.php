@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\View\View;
+use App\Models\Plan;
 
 class ProfileController extends Controller
 {
@@ -18,8 +19,11 @@ class ProfileController extends Controller
     public function edit(Request $request): View
     {
         $user = Auth::user();
+        $currentPlan = $user->plan;
+
         return view('profile.edit', [
             'user' => $request->user(),
+            'currentPlan' => $currentPlan,
         ]);
     }
 
@@ -47,11 +51,17 @@ class ProfileController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+
+        $user = $request->user();
+
+        if ($user->id === 1) {
+            return Redirect::route('profile.edit')
+                ->with('error', 'The primary admin account cannot be deleted.');
+        }
+
         $request->validateWithBag('userDeletion', [
             'password' => ['required', 'current_password'],
         ]);
-
-        $user = $request->user();
 
         Auth::logout();
 

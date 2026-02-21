@@ -16,6 +16,7 @@
                 <!-- Navigation Links (Desktop) -->
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                     @auth
+
                         <x-nav-link :href="route('datasets.index')" :active="request()->routeIs('datasets.index')">
                             {{ __('Clean My Data') }}
                         </x-nav-link>
@@ -29,30 +30,61 @@
                         <x-nav-link :href="route('ai-chat.index')" :active="request()->routeIs('ai-chat.index')">
                             {{ __('Data AI Assistant') }}
                         </x-nav-link>
+
+                        @if(auth()->check() && auth()->user()->role === 'admin')
+                            <x-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.index')">
+                                {{ __('Admin Panel') }}
+                            </x-nav-link>
+                            @endif
+
+                        <div class="flex items-center">
+                            <x-dropdown align="left" width="48">
+                                <x-slot name="trigger">
+                                    <button
+                                    class="inline-flex items-center h-full px-1 pt-1 -mb-px border-b-2 text-sm font-medium leading-5 transition
+                                    border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 focus:outline-none"
+                                    >
+                                    {{ __('More') }}
+                                    </button>
+                                </x-slot>
+
+                                <x-slot name="content">
+                                    <x-dropdown-link :href="route('how-it-works')">
+                                        {{ __('How It Works') }}
+                                    </x-dropdown-link>
+
+                                    <x-dropdown-link :href="route('privacy.policy')">
+                                        {{ __('Privacy Policy') }}
+                                    </x-dropdown-link>
+
+                                    <x-dropdown-link :href="route('contact')">
+                                        {{ __('Contact Us') }}
+                                    </x-dropdown-link>
+                                </x-slot>
+                            </x-dropdown>
+
+
+
+                        </div>
                     @endauth
 
-                    <x-nav-link :href="route('how-it-works')" :active="request()->routeIs('how-it-works')">
-                        {{ __('How It Works') }}
-                    </x-nav-link>
 
-                    <x-nav-link :href="route('privacy.policy')" :active="request()->routeIs('privacy.policy')">
-                        {{ __('Privacy Policy') }}
-                    </x-nav-link>
+                    @guest
 
-                    <x-nav-link :href="route('contact')" :active="request()->routeIs('contact')">
-                        {{ __('Contact Us') }}
-                    </x-nav-link>
+                        <x-nav-link :href="route('how-it-works')" :active="request()->routeIs('how-it-works')">
+                            {{ __('How It Works') }}
+                        </x-nav-link>
 
-                    <x-nav-link :href="route('pricing')" :active="request()->routeIs('pricing')">
-                        {{ __('Pricing') }}
-                    </x-nav-link>
+                        <x-nav-link :href="route('privacy.policy')" :active="request()->routeIs('privacy.policy')">
+                            {{ __('Privacy Policy') }}
+                        </x-nav-link>
 
+                        <x-nav-link :href="route('contact')" :active="request()->routeIs('contact')">
+                            {{ __('Contact Us') }}
+                        </x-nav-link>
 
-                    @if(auth()->check() && auth()->user()->role === 'admin')
-                    <x-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.index')">
-                        {{ __('Admin Panel') }}
-                    </x-nav-link>
-                    @endif
+                    @endguest
+
 
                 </div>
             </div>
@@ -88,7 +120,7 @@
 
                         <x-slot name="content">
                             <x-dropdown-link :href="route('profile.edit')">
-                                {{ __('Profile') }}
+                                {{ __('My Profile') }}
                             </x-dropdown-link>
 
                             <form method="POST" action="{{ route('logout') }}">
@@ -159,7 +191,7 @@
 
             <div class="mt-3 space-y-1">
                 <x-responsive-nav-link :href="route('profile.edit')">
-                    {{ __('Profile') }}
+                    {{ __('My Profile') }}
                 </x-responsive-nav-link>
 
                 <form method="POST" action="{{ route('logout') }}">

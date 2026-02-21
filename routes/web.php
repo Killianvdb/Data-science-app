@@ -73,7 +73,7 @@ Route::middleware('auth')->group(function () {
         // Optional: Add these new routes for better UX
         // API endpoint to check processing status (if you implement async processing later)
         // Route::get('/status/{jobId}', [DatasetController::class, 'checkStatus'])->name('status');
-        
+
         // API endpoint to get file metadata
         // Route::get('/metadata/{filename}', [DatasetController::class, 'getMetadata'])->name('metadata');
     });
@@ -92,6 +92,7 @@ Route::middleware('auth')->group(function () {
         Route::patch('users/{user}/role', [UserController::class,'updateRole'])->name('users.updateRole');
         Route::delete('users/{user}', [UserController::class,'destroy'])->name('users.destroy');
         Route::get('users/search', [UserController::class,'search'])->name('users.search');
+        Route::patch('users/{user}/plan', [UserController::class,'updatePlan'])->name('users.plan');
     });
 });
 
