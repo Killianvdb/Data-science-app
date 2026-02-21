@@ -29,7 +29,7 @@ class UserSeeder extends Seeder
 
     // Ne crée les 500 users que si il y en a moins de 10 (évite d'en créer à chaque redémarrage)
     if (User::count() < 10) {
-        User::factory(500)->create();
+        User::factory(100)->create();
     }
 }
 }
