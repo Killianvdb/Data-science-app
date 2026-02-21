@@ -26,8 +26,8 @@
                             {{ __('My Datasets') }}
                         </x-nav-link>
 
-                        <x-nav-link :href="route('profile.edit')" :active="request()->routeIs('profile.edit')">
-                            {{ __('My Profile') }}
+                        <x-nav-link :href="route('ai-chat.index')" :active="request()->routeIs('ai-chat.index')">
+                            {{ __('Data AI Assistant') }}
                         </x-nav-link>
                     @endauth
 
