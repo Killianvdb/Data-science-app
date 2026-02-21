@@ -24,35 +24,84 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ============================================================================
-# GROQ LLM CLIENT
+# GEMINI LLM CLIENT (remplace Gemini)
 # ============================================================================
 
-class GroqLLM:
+class GeminiLLM:
+    """Client Gemini via REST (urllib) — meme interface que GeminiLLM.
+    Utilise GEMINI_API_KEY comme variable d'environnement.
+    """
+    API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+
     def __init__(self):
         self.available = False
-        self.model = None
+        self.model = "gemini-2.0-flash"
+        import os
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            _safe_stderr("WARNING: GEMINI_API_KEY non definie (mode fallback active)")
+            return
         try:
-            from groq import Groq
-            api_key = os.environ.get("GROQ_API_KEY")
-            if not api_key:
-                print("⚠️  GROQ_API_KEY non définie (mode sans LLM)", file=sys.stderr)
-                return
-            self.client = Groq(api_key=api_key)
-            for model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
-                try:
-                    self.client.chat.completions.create(
-                        model=model, messages=[{"role": "user", "content": "test"}], max_tokens=5
-                    )
-                    self.model = model
-                    self.available = True
-                    print(f"✅ Groq LLM initialisé ({model})", file=sys.stderr)
-                    break
-                except:
-                    continue
-            if not self.available:
-                print("⚠️  Aucun modèle Groq disponible", file=sys.stderr)
-        except ImportError:
-            print("⚠️  Package 'groq' non installé", file=sys.stderr)
+            import urllib.request, json as _j
+            data = _j.dumps({
+                "contents": [{"parts": [{"text": "test"}]}],
+                "generationConfig": {"maxOutputTokens": 5}
+            }).encode()
+            req = urllib.request.Request(
+                self.API_URL + "?key=" + api_key,
+                data=data, headers={"Content-Type": "application/json"}, method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                r.read()
+            self._api_key = api_key
+            self.available = True
+            _safe_stderr(f"OK Gemini LLM initialized ({self.model})")
+        except Exception as e:
+            _safe_stderr(f"WARNING: Gemini LLM not available: {e}")
+
+    def call(self, prompt: str, max_tokens: int = 1000):
+        if not self.available:
+            return None
+        import urllib.request, json as _j
+        payload = _j.dumps({
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0}
+        }).encode()
+        try:
+            req = urllib.request.Request(
+                self.API_URL + "?key=" + self._api_key,
+                data=payload, headers={"Content-Type": "application/json"}, method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=60) as r:
+                resp = _j.loads(r.read())
+            return resp["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception as e:
+            _safe_stderr(f"WARNING: Gemini API error: {e}")
+            return None
+
+
+def _safe_stderr(*args, **kwargs):
+    """Print vers stderr compatible Windows (gère les emojis/accents)."""
+    import io
+    kwargs['file'] = sys.stderr
+    try:
+        _safe_stderr(*args, **kwargs)
+    except UnicodeEncodeError:
+        # Fallback : encoder en ASCII avec remplacement
+        text = ' '.join(str(a) for a in args)
+        safe = text.encode('ascii', errors='replace').decode('ascii')
+        print(safe)
+
+# ============================================================================
+# GEMINI LLM CLIENT (remplace Gemini — urllib built-in, aucun package requis)
+# ============================================================================
+
+class GeminiLLM:
+    """Client Gemini 2.0 Flash via REST.
+    Variable d'environnement requise : GEMINI_API_KEY
+    Interface identique a l'ancien GeminiLLM : .available, .model, .call()
+    """
+    _API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
     def call(self, prompt, max_tokens=2000):
         if not self.available:
@@ -67,26 +116,50 @@ class GroqLLM:
             )
             return response.choices[0].message.content
         except Exception as e:
-            print(f"⚠️  Erreur LLM: {e}", file=sys.stderr)
+            _safe_stderr(f"⚠️  Erreur LLM: {e}")
             return None
 
 # ============================================================================
 # HELPERS
 # ============================================================================
 
-def load_csv(path):
+def load_csv(path, llm=None):
+    """Charge un CSV et normalise automatiquement les colonnes de dates."""
+    df = None
     for enc in ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']:
         try:
             df = pd.read_csv(path, encoding=enc, on_bad_lines='skip')
-            print(f"   ✅ Chargé: {os.path.basename(path)} ({len(df)} lignes, encoding={enc})", file=sys.stderr)
-            return df
+            _safe_stderr(f"   ✅ Chargé: {os.path.basename(path)} ({len(df)} lignes, encoding={enc})")
+            break
         except UnicodeDecodeError:
             continue
         except Exception as e:
-            print(f"   ❌ Erreur: {e}", file=sys.stderr)
+            _safe_stderr(f"   ❌ Erreur: {e}")
             return None
-    print(f"   ❌ Impossible de charger: {path}", file=sys.stderr)
-    return None
+
+    if df is None:
+        _safe_stderr(f"   ❌ Impossible de charger: {path}")
+        return None
+
+    # Nettoyage global des strings
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            df[col] = df[col].astype(str).str.strip()
+            df[col] = df[col].replace(
+                ['nan', 'NaN', 'None', '', 'null', 'NULL', 'N/A', 'n/a', 'NA'],
+                np.nan
+            )
+
+    # Normaliser les colonnes de dates si date_utils est disponible
+    if DATE_UTILS_AVAILABLE:
+        date_cols_found = [c for c in df.columns if is_date_column(df[c])]
+        if date_cols_found:
+            _safe_stderr(f"   📅 Colonnes dates détectées: {date_cols_found}")
+            for col in date_cols_found:
+                _safe_stderr(f"   📅 Parsing: {col}...")
+                df[col] = parse_date_column(df[col], llm_client=llm, verbose=True)
+
+    return df
 
 def create_profile(df, max_samples=5):
     profile = {"total_rows": len(df), "total_columns": len(df.columns), "columns": {}}
@@ -112,14 +185,9 @@ def create_profile(df, max_samples=5):
 # ============================================================================
 
 class CrossReferenceEngine:
-    """
-    Enrichit le fichier principal avec les fichiers de référence.
-    Tracking des colonnes de référence pour Fix 1.
-    """
-
-    def __init__(self, llm: GroqLLM):
+    def __init__(self, llm: GeminiLLM):
         self.llm = llm
-        self.ref_columns = set()  # Fix 1: colonnes venant des fichiers de référence
+        self.ref_columns = set()
 
     def find_join_keys_exact(self, df_main, df_ref):
         common = list(set(df_main.columns) & set(df_ref.columns))
@@ -156,55 +224,44 @@ If none found: {{"join_pairs": []}}"""
     def enrich(self, df_main, df_ref, ref_name="reference"):
         rapport = {"ref_file": ref_name, "method": None, "join_keys": [],
                    "columns_added": [], "rows_enriched": 0}
-
-        print(f"\n   🔗 Cross-reference avec: {ref_name}", file=sys.stderr)
-
+        _safe_stderr(f"\n   🔗 Cross-reference avec: {ref_name}")
         exact_keys = self.find_join_keys_exact(df_main, df_ref)
-
         if exact_keys:
-            print(f"      ✅ Clés exactes: {exact_keys}", file=sys.stderr)
+            _safe_stderr(f"      ✅ Clés exactes: {exact_keys}")
             rapport["method"] = "exact"
             rapport["join_keys"] = exact_keys
             df_main = self._merge(df_main, df_ref, exact_keys, exact_keys, rapport)
         else:
-            print(f"      🤖 Pas de clé exacte, consultation LLM...", file=sys.stderr)
+            _safe_stderr(f"      🤖 Pas de clé exacte, consultation LLM...")
             llm_pairs = self.find_join_keys_llm(df_main, df_ref)
             if llm_pairs:
                 main_keys = [p["main_column"] for p in llm_pairs]
                 ref_keys  = [p["ref_column"]  for p in llm_pairs]
-                print(f"      ✅ Clés LLM: {list(zip(main_keys, ref_keys))}", file=sys.stderr)
+                _safe_stderr(f"      ✅ Clés LLM: {list(zip(main_keys, ref_keys))}")
                 rapport["method"] = "llm"
                 df_ref_r = df_ref.rename(columns={ref_keys[i]: main_keys[i] for i in range(len(main_keys))})
                 df_main = self._merge(df_main, df_ref_r, main_keys, main_keys, rapport)
             else:
-                print(f"      ❌ Aucune clé trouvée, référence ignorée", file=sys.stderr)
+                _safe_stderr(f"      ❌ Aucune clé trouvée, référence ignorée")
                 rapport["method"] = "none"
-
         return df_main, rapport
 
     def _merge(self, df_main, df_ref, main_keys, ref_keys, rapport):
         cols_to_add  = [c for c in df_ref.columns if c not in df_main.columns and c not in ref_keys]
         cols_to_fill = [c for c in df_ref.columns if c in df_main.columns and c not in ref_keys]
-
         if not cols_to_add and not cols_to_fill:
-            print(f"      ℹ️  Aucune colonne à enrichir", file=sys.stderr)
+            _safe_stderr(f"      ℹ️  Aucune colonne à enrichir")
             return df_main
-
         df_m = df_main.copy()
         df_r = df_ref.copy()
-
         for key in main_keys:
             df_m[f"__k_{key}"] = df_m[key].astype(str).str.strip().str.lower()
         for key in ref_keys:
             df_r[f"__k_{key}"] = df_r[key].astype(str).str.strip().str.lower()
-
         merge_keys = [f"__k_{k}" for k in main_keys]
-
         ref_sub = df_r[merge_keys + cols_to_add + cols_to_fill].copy().add_suffix("_REF")
         ref_sub = ref_sub.rename(columns={f"__k_{k}_REF": f"__k_{k}" for k in main_keys})
-
         df_merged = df_m.merge(ref_sub, on=merge_keys, how="left")
-
         for col in cols_to_fill:
             ref_col = f"{col}_REF"
             if ref_col in df_merged.columns:
@@ -212,20 +269,18 @@ If none found: {{"join_pairs": []}}"""
                 df_merged[col] = df_merged[col].combine_first(df_merged[ref_col])
                 filled = nb - df_merged[col].isna().sum()
                 if filled > 0:
-                    print(f"      📥 {col}: {filled} NULL remplis", file=sys.stderr)
+                    _safe_stderr(f"      📥 {col}: {filled} NULL remplis")
                     rapport["rows_enriched"] += filled
                 df_merged.drop(columns=[ref_col], inplace=True)
-                self.ref_columns.add(col)  # Fix 1
-
+                self.ref_columns.add(col)
         for col in cols_to_add:
             ref_col = f"{col}_REF"
             if ref_col in df_merged.columns:
                 df_merged[col] = df_merged[ref_col]
                 df_merged.drop(columns=[ref_col], inplace=True)
-                print(f"      ➕ Colonne ajoutée: {col}", file=sys.stderr)
+                _safe_stderr(f"      ➕ Colonne ajoutée: {col}")
                 rapport["columns_added"].append(col)
-                self.ref_columns.add(col)  # Fix 1
-
+                self.ref_columns.add(col)
         df_merged.drop(columns=[c for c in df_merged.columns if c.startswith("__k_")], inplace=True)
         return df_merged
 
@@ -234,12 +289,7 @@ If none found: {{"join_pairs": []}}"""
 # ============================================================================
 
 class Validator:
-    """
-    Fix 3: Prompt amélioré — interdit les règles sur colonnes textuelles/catégorielles.
-    Seules les règles numériques et de dates sont générées par le LLM.
-    """
-
-    def __init__(self, llm: GroqLLM, rules_path=None):
+    def __init__(self, llm: GeminiLLM, rules_path=None):
         self.llm = llm
         self.custom_rules = self._load_rules(rules_path)
 
@@ -249,19 +299,16 @@ class Validator:
         try:
             with open(path) as f:
                 rules = json.load(f).get("rules", [])
-            print(f"   📋 {len(rules)} règles custom chargées", file=sys.stderr)
+            _safe_stderr(f"   📋 {len(rules)} règles custom chargées")
             return rules
         except Exception as e:
-            print(f"   ⚠️  Erreur rules.json: {e}", file=sys.stderr)
+            _safe_stderr(f"   ⚠️  Erreur rules.json: {e}")
             return []
 
     def generate_llm_rules(self, df):
         if not self.llm.available:
             return []
-
         profile = create_profile(df)
-
-        # Fix 3: prompt strict — UNIQUEMENT colonnes numériques et dates
         prompt = f"""Generate validation rules for CLEAR business errors in this dataset.
 
 Profile:
@@ -297,32 +344,27 @@ Respond ONLY valid JSON:
   ]
 }}
 Max 8 rules. Only for existing columns."""
-
         result = self.llm.call(prompt, max_tokens=1200)
         if not result:
             return []
         try:
             rules = json.loads(result).get("rules", [])
-            print(f"   🤖 {len(rules)} règles générées par LLM", file=sys.stderr)
+            _safe_stderr(f"   🤖 {len(rules)} règles générées par LLM")
             return rules
         except:
             return []
 
     def validate(self, df):
-        print(f"\n🔍 Validation métier...", file=sys.stderr)
-
+        _safe_stderr(f"\n🔍 Validation métier...")
         llm_rules = self.generate_llm_rules(df)
         merged = {r["rule_id"]: r for r in llm_rules}
         for r in self.custom_rules:
-            merged[r["rule_id"]] = r  # custom écrase LLM
+            merged[r["rule_id"]] = r
         all_rules = list(merged.values())
-
         if not all_rules:
-            print("   ℹ️  Aucune règle applicable", file=sys.stderr)
+            _safe_stderr("   ℹ️  Aucune règle applicable")
             return df, []
-
-        print(f"   📋 {len(all_rules)} règles ({len(llm_rules)} LLM + {len(self.custom_rules)} custom)", file=sys.stderr)
-
+        _safe_stderr(f"   📋 {len(all_rules)} règles ({len(llm_rules)} LLM + {len(self.custom_rules)} custom)")
         rapport = []
         for rule in all_rules:
             df, v, f = self._apply(df, rule)
@@ -347,55 +389,41 @@ Max 8 rules. Only for existing columns."""
             v = int(mask.sum())
             if v == 0:
                 return df, 0, 0
-            print(f"   ⚠️  [{rid}] {desc}: {v} violations", file=sys.stderr)
-
+            _safe_stderr(f"   ⚠️  [{rid}] {desc}: {v} violations")
             if action == "abs" and col in df.columns:
                 df.loc[mask, col] = df.loc[mask, col].abs()
                 f = v
-                print(f"      → valeur absolue", file=sys.stderr)
             elif action == "drop":
                 df = df[~mask].copy()
                 f = v
-                print(f"      → {v} lignes supprimées", file=sys.stderr)
             elif action == "null" and col in df.columns:
                 df.loc[mask, col] = np.nan
                 f = v
-                print(f"      → mis à NULL", file=sys.stderr)
             elif action == "set" and col in df.columns and val is not None:
                 df.loc[mask, col] = val
                 f = v
-                print(f"      → mis à '{val}'", file=sys.stderr)
             elif action == "flag":
                 flag_col = f"FLAG_{rid}"
                 df[flag_col] = False
                 df.loc[mask, flag_col] = True
-                print(f"      → flag: {flag_col}", file=sys.stderr)
         except Exception as e:
-            print(f"   ❌ Erreur règle [{rid}]: {e}", file=sys.stderr)
+            _safe_stderr(f"   ❌ Erreur règle [{rid}]: {e}")
         return df, v, f
 
 # ============================================================================
-# 3. DERIVED COLUMNS RECALCULATOR (Fix 2)
+# 3. DERIVED COLUMNS RECALCULATOR
 # ============================================================================
 
 class DerivedColumnsRecalculator:
-    """
-    Fix 2: Détecte et recalcule les colonnes dérivées de manière 100% générique.
-    Le LLM détecte les formules mathématiques entre colonnes numériques.
-    Exemples: TotalAmount = Quantity x UnitPrice, Profit = Revenue - Cost
-    """
-
-    def __init__(self, llm: GroqLLM):
+    def __init__(self, llm: GeminiLLM):
         self.llm = llm
 
     def detect_formulas(self, df):
         if not self.llm.available:
             return []
-
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         if len(numeric_cols) < 2:
             return []
-
         profile = {"total_rows": len(df), "numeric_columns": {}}
         for col in numeric_cols:
             non_null = df[col].dropna()
@@ -406,7 +434,6 @@ class DerivedColumnsRecalculator:
                     "mean": round(float(non_null.mean()), 4),
                     "samples": [round(float(v), 4) for v in non_null.head(5).tolist()]
                 }
-
         prompt = f"""Detect mathematical relationships between numeric columns (derived columns).
 
 Numeric profile:
@@ -429,7 +456,6 @@ Respond ONLY valid JSON:
 
 Only confidence >= 0.85. If none: {{"derived_columns": []}}
 formula must be valid pandas."""
-
         result = self.llm.call(prompt, max_tokens=600)
         if not result:
             return []
@@ -440,59 +466,42 @@ formula must be valid pandas."""
             return []
 
     def recalculate(self, df):
-        print(f"\n🔢 Détection des colonnes dérivées...", file=sys.stderr)
-
+        _safe_stderr(f"\n🔢 Détection des colonnes dérivées...")
         formulas = self.detect_formulas(df)
         if not formulas:
-            print("   ℹ️  Aucune colonne dérivée détectée", file=sys.stderr)
+            _safe_stderr("   ℹ️  Aucune colonne dérivée détectée")
             return df, []
-
-        print(f"   🤖 {len(formulas)} formule(s) détectée(s)", file=sys.stderr)
-
+        _safe_stderr(f"   🤖 {len(formulas)} formule(s) détectée(s)")
         rapport = []
         for fi in formulas:
             target   = fi.get("target")
             formula  = fi.get("formula")
             readable = fi.get("formula_readable", formula)
-
             if not target or not formula or target not in df.columns:
                 continue
-
-            print(f"\n   📐 {target} = {readable}", file=sys.stderr)
-
+            _safe_stderr(f"\n   📐 {target} = {readable}")
             try:
                 expected = eval(formula, {"df": df, "pd": pd, "np": np})
                 if not isinstance(expected, pd.Series):
                     continue
-
-                # Vérifier que la formule tient sur les données existantes (>= 70%)
                 valid = df[target].notna() & expected.notna()
                 if valid.sum() == 0:
                     continue
-
                 match_pct = (abs(df.loc[valid, target] - expected[valid]) < 0.05).sum() / valid.sum()
                 if match_pct < 0.70:
-                    print(f"      ⚠️  Seulement {match_pct*100:.0f}% de correspondance, ignorée", file=sys.stderr)
+                    _safe_stderr(f"      ⚠️  {match_pct*100:.0f}% de correspondance, ignorée")
                     continue
-
-                print(f"      ✅ Formule validée ({match_pct*100:.0f}% match)", file=sys.stderr)
-
-                # Recalculer les valeurs incohérentes ET les NULL
+                _safe_stderr(f"      ✅ Formule validée ({match_pct*100:.0f}% match)")
                 incoherent = valid & (abs(df[target] - expected) > 0.05)
                 to_fix = incoherent | df[target].isna()
-
                 if to_fix.sum() == 0:
-                    print(f"      ℹ️  Tout est cohérent", file=sys.stderr)
                     continue
-
                 df.loc[to_fix, target] = expected[to_fix]
                 count = int(to_fix.sum())
-                print(f"      🔢 {count} valeurs recalculées", file=sys.stderr)
+                _safe_stderr(f"      🔢 {count} valeurs recalculées")
                 rapport.append({"target": target, "formula": readable, "recalculated": count})
-
             except Exception as e:
-                print(f"      ❌ Erreur: {e}", file=sys.stderr)
-
+                _safe_stderr(f"      ❌ Erreur: {e}")
         return df, rapport
 
 # ============================================================================
@@ -500,56 +509,40 @@ formula must be valid pandas."""
 # ============================================================================
 
 class LLMEnricher:
-    """
-    Fix 1: Ignore les colonnes venant des fichiers de référence.
-    Ces colonnes doivent être remplies par lookup, pas par devinette LLM.
-    """
-
     IDENTITY_KEYWORDS = ['id', 'email', 'phone', 'address', 'user', 'customer']
 
-    def __init__(self, llm: GroqLLM):
+    def __init__(self, llm: GeminiLLM):
         self.llm = llm
 
     def enrich(self, df, ref_columns=None, max_rows=50):
         if not self.llm.available:
-            print("   ℹ️  LLM Enricher désactivé", file=sys.stderr)
+            _safe_stderr("   ℹ️  LLM Enricher désactivé")
             return df, []
-
         ref_columns = set(ref_columns or [])
         null_cols = [(c, int(df[c].isna().sum())) for c in df.columns if df[c].isna().sum() > 0]
-
         if not null_cols:
-            print("   ✅ Aucun NULL restant", file=sys.stderr)
+            _safe_stderr("   ✅ Aucun NULL restant")
             return df, []
-
-        print(f"\n🤖 LLM Enricher — {len(null_cols)} colonnes avec NULL", file=sys.stderr)
+        _safe_stderr(f"\n🤖 LLM Enricher — {len(null_cols)} colonnes avec NULL")
         report = []
-
         for col, null_count in null_cols:
-            # Fix 1: ignorer les colonnes de référence
             if col in ref_columns:
-                print(f"   🔗 {col}: ignoré (colonne de référence)", file=sys.stderr)
+                _safe_stderr(f"   🔗 {col}: ignoré (colonne de référence)")
                 continue
-
             if any(kw in col.lower() for kw in self.IDENTITY_KEYWORDS):
-                print(f"   🔒 {col}: ignoré (identité)", file=sys.stderr)
+                _safe_stderr(f"   🔒 {col}: ignoré (identité)")
                 continue
-
             null_mask = df[col].isna()
             rows_to_enrich = df[null_mask].head(max_rows)
             if len(rows_to_enrich) == 0:
                 continue
-
-            print(f"   🔍 {col} ({min(null_count, max_rows)} lignes)", file=sys.stderr)
-
+            _safe_stderr(f"   🔍 {col} ({min(null_count, max_rows)} lignes)")
             context_rows = []
             for idx, row in rows_to_enrich.iterrows():
                 ctx = {c: str(v) for c, v in row.items()
                        if c != col and pd.notna(v) and not c.startswith("FLAG_")}
                 context_rows.append({"index": int(idx), "context": ctx})
-
             known = df[~null_mask][col].dropna().head(10).tolist()
-
             prompt = f"""Predict missing values for column "{col}".
 Known values: {known}
 Rows to predict:
@@ -558,11 +551,9 @@ Rows to predict:
 Respond ONLY valid JSON:
 {{"predictions": [{{"index": 0, "predicted_value": "...", "confidence": 0.0}}]}}
 Only confidence >= 0.7."""
-
             result = self.llm.call(prompt, max_tokens=1000)
             if not result:
                 continue
-
             try:
                 predictions = json.loads(result).get("predictions", [])
                 applied = 0
@@ -570,11 +561,10 @@ Only confidence >= 0.7."""
                     if p.get("confidence", 0) >= 0.7 and p.get("index") is not None:
                         df.at[p["index"], col] = p["predicted_value"]
                         applied += 1
-                print(f"      ✅ {applied}/{len(rows_to_enrich)} prédites", file=sys.stderr)
+                _safe_stderr(f"      ✅ {applied}/{len(rows_to_enrich)} prédites")
                 report.append({"column": col, "total_null": null_count, "enriched": applied})
             except Exception as e:
-                print(f"      ❌ {e}", file=sys.stderr)
-
+                _safe_stderr(f"      ❌ {e}")
         return df, report
 
 # ============================================================================
@@ -585,27 +575,25 @@ class Imputer:
     IDENTITY_KEYWORDS = ['id', 'email', 'phone', 'address', 'name', 'user', 'customer', 'code']
 
     def impute(self, df):
-        print(f"\n🔧 Imputation finale...", file=sys.stderr)
+        _safe_stderr(f"\n🔧 Imputation finale...")
         null_cols = [(c, int(df[c].isna().sum())) for c in df.columns if df[c].isna().sum() > 0]
-
         if not null_cols:
-            print("   ✅ Aucun NULL", file=sys.stderr)
+            _safe_stderr("   ✅ Aucun NULL")
             return df
-
         for col, count in null_cols:
             if any(kw in col.lower() for kw in self.IDENTITY_KEYWORDS):
-                print(f"   🔒 {col}: {count} NULL conservés (identité)", file=sys.stderr)
+                _safe_stderr(f"   🔒 {col}: {count} NULL conservés (identité)")
                 continue
             if pd.api.types.is_numeric_dtype(df[col]):
                 med = df[col].median()
                 if pd.notna(med):
                     df[col] = df[col].fillna(med)
-                    print(f"   🔢 {col}: médiane ({med:.2f})", file=sys.stderr)
+                    _safe_stderr(f"   🔢 {col}: médiane ({med:.2f})")
             else:
                 mode = df[col].mode()
                 if not mode.empty:
                     df[col] = df[col].fillna(mode[0])
-                    print(f"   📝 {col}: mode ('{mode[0]}')", file=sys.stderr)
+                    _safe_stderr(f"   📝 {col}: mode ('{mode[0]}')")
         return df
 
 # ============================================================================
@@ -620,8 +608,8 @@ def export_results(df, input_path, output_dir, rapport):
     df.to_csv(out_csv, index=False, quoting=csv.QUOTE_MINIMAL)
     with open(out_json, 'w') as f:
         json.dump(rapport, f, indent=2, default=str)
-    print(f"\n   💾 CSV: {out_csv}", file=sys.stderr)
-    print(f"   📊 Rapport: {out_json}", file=sys.stderr)
+    _safe_stderr(f"\n   💾 CSV: {out_csv}")
+    _safe_stderr(f"   📊 Rapport: {out_json}")
     return out_csv, out_json
 
 # ============================================================================
@@ -639,14 +627,15 @@ class CrossReferencePipeline:
         self.imputer          = Imputer()
 
     def run(self, main_file, ref_files, output_dir):
-        print(f"\n{'='*60}", file=sys.stderr)
-        print(f"🚀 CROSS REFERENCE PIPELINE v1.1", file=sys.stderr)
-        print(f"📂 {os.path.basename(main_file)}", file=sys.stderr)
+        _safe_stderr(f"\n{'='*60}")
+        _safe_stderr(f"🚀 CROSS REFERENCE PIPELINE v2.0")
+        _safe_stderr(f"📂 {os.path.basename(main_file)}")
         if ref_files:
-            print(f"📚 Refs: {[os.path.basename(r) for r in ref_files]}", file=sys.stderr)
-        print(f"{'='*60}", file=sys.stderr)
+            _safe_stderr(f"📚 Refs: {[os.path.basename(r) for r in ref_files]}")
+        _safe_stderr(f"{'='*60}")
 
-        df = load_csv(main_file)
+        # Chargement avec normalisation des dates intégrée
+        df = load_csv(main_file, llm=self.llm)
         if df is None:
             return None
 
@@ -660,50 +649,50 @@ class CrossReferencePipeline:
 
         # 1. Cross Reference
         if ref_files:
-            print(f"\n{'─'*40}\n1️⃣  CROSS REFERENCE\n{'─'*40}", file=sys.stderr)
+            _safe_stderr(f"\n{'─'*40}\n1️⃣  CROSS REFERENCE\n{'─'*40}")
             for ref_file in ref_files:
-                df_ref = load_csv(ref_file)
+                df_ref = load_csv(ref_file, llm=self.llm)
                 if df_ref is None:
                     continue
                 df, ref_r = self.cross_ref_engine.enrich(df, df_ref, os.path.basename(ref_file))
                 rapport["cross_reference"].append(ref_r)
         else:
-            print(f"\n   ℹ️  Mode simple (pas de références)", file=sys.stderr)
+            _safe_stderr(f"\n   ℹ️  Mode simple (pas de références)")
 
         # 2. Validation
-        print(f"\n{'─'*40}\n2️⃣  VALIDATION MÉTIER\n{'─'*40}", file=sys.stderr)
+        _safe_stderr(f"\n{'─'*40}\n2️⃣  VALIDATION MÉTIER\n{'─'*40}")
         df, val_r = self.validator.validate(df)
         rapport["validation"] = val_r
 
-        # 3. Recalcul colonnes dérivées (Fix 2)
-        print(f"\n{'─'*40}\n3️⃣  RECALCUL COLONNES DÉRIVÉES\n{'─'*40}", file=sys.stderr)
+        # 3. Recalcul colonnes dérivées
+        _safe_stderr(f"\n{'─'*40}\n3️⃣  RECALCUL COLONNES DÉRIVÉES\n{'─'*40}")
         df, der_r = self.derived_recalc.recalculate(df)
         rapport["derived_columns"] = der_r
 
-        # 4. LLM Enricher (Fix 1: passe ref_columns)
+        # 4. LLM Enricher
         if self.llm_enricher and self.llm.available:
-            print(f"\n{'─'*40}\n4️⃣  LLM ENRICHER\n{'─'*40}", file=sys.stderr)
+            _safe_stderr(f"\n{'─'*40}\n4️⃣  LLM ENRICHER\n{'─'*40}")
             df, enr_r = self.llm_enricher.enrich(
                 df, ref_columns=self.cross_ref_engine.ref_columns
             )
             rapport["enrichment"] = enr_r
 
         # 5. Imputation finale
-        print(f"\n{'─'*40}\n5️⃣  IMPUTATION FINALE\n{'─'*40}", file=sys.stderr)
+        _safe_stderr(f"\n{'─'*40}\n5️⃣  IMPUTATION FINALE\n{'─'*40}")
         df = self.imputer.impute(df)
 
         # 6. Export
-        print(f"\n{'─'*40}\n6️⃣  EXPORT\n{'─'*40}", file=sys.stderr)
+        _safe_stderr(f"\n{'─'*40}\n6️⃣  EXPORT\n{'─'*40}")
         rapport.update({"final_rows": len(df), "final_cols": len(df.columns),
                          "null_remaining": int(df.isna().sum().sum())})
         out_csv, out_json = export_results(df, main_file, output_dir, rapport)
 
-        print(f"\n{'='*60}", file=sys.stderr)
-        print(f"✅ PIPELINE TERMINÉ", file=sys.stderr)
-        print(f"   Lignes  : {rapport['initial_rows']} → {rapport['final_rows']}", file=sys.stderr)
-        print(f"   Colonnes: {rapport['initial_cols']} → {rapport['final_cols']}", file=sys.stderr)
-        print(f"   NULL restants: {rapport['null_remaining']}", file=sys.stderr)
-        print(f"{'='*60}", file=sys.stderr)
+        _safe_stderr(f"\n{'='*60}")
+        _safe_stderr(f"✅ PIPELINE TERMINÉ")
+        _safe_stderr(f"   Lignes  : {rapport['initial_rows']} → {rapport['final_rows']}")
+        _safe_stderr(f"   Colonnes: {rapport['initial_cols']} → {rapport['final_cols']}")
+        _safe_stderr(f"   NULL restants: {rapport['null_remaining']}")
+        _safe_stderr(f"{'='*60}")
 
         return {"status": "success", "output_csv": out_csv, "output_report": out_json, "rapport": rapport}
 
@@ -712,7 +701,7 @@ class CrossReferencePipeline:
 # ============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="Cross Reference Engine v1.1")
+    parser = argparse.ArgumentParser(description="Cross Reference Engine v2.0")
     parser.add_argument("files", nargs="+")
     parser.add_argument("--output", default="cross_ref_output")
     parser.add_argument("--rules", default=None)
@@ -724,7 +713,7 @@ def main():
             print(json.dumps({"status": "error", "message": f"Introuvable: {f}"}))
             sys.exit(1)
 
-    llm = GroqLLM()
+    llm = GeminiLLM()
     pipeline = CrossReferencePipeline(llm, rules_path=args.rules,
                                        use_llm_enricher=not args.no_llm_enricher)
     result = pipeline.run(args.files[0], args.files[1:], args.output)
