@@ -44,10 +44,11 @@ services:
       QUEUE_CONNECTION: database
       GROQ_API_KEY: ${GROQ_API_KEY:-}
     volumes:
-      - .:/app 
+      - ./:/app
       - ./storage/app/shared_data:/shared_data
       - /var/run/docker.sock:/var/run/docker.sock
-
+    env_file:
+    - .env.docker
     networks:
       - datasci_net
     depends_on:
@@ -56,6 +57,7 @@ services:
     command: >
       sh -c "
         echo '🔗 Creating storage symlink...' &&
+        rm -rf public/storage &&
         php artisan storage:link || true &&
         if [ -z \"$$APP_KEY\" ] || [ \"$$APP_KEY\" = \"base64:\" ]; then
           echo '🔑 Generating APP_KEY...';
@@ -108,7 +110,10 @@ services:
         QUEUE_CONNECTION: database
         GROQ_API_KEY: ${GROQ_API_KEY:-}
       volumes:
+        - ./:/app
         - ./storage/app/shared_data:/shared_data
+      env_file:
+      - .env.docker
       networks:
         - datasci_net
       depends_on:
@@ -123,11 +128,27 @@ services:
           done
         "
 
+  stripe:
+    image: stripe/stripe-cli:latest
+    container_name: datasci-stripe
+    restart: unless-stopped
+    command: listen --forward-to http://app:8000/stripe/webhook
+    environment:
+      STRIPE_API_KEY: ${STRIPE_API_KEY}
+    volumes:
+      - stripe_cli_config:/root/.config/stripe
+    networks:
+      - datasci_net
+    depends_on:
+      - app
+
+
 networks:
   datasci_net:
     driver: bridge
 
 volumes:
   postgres_data:
+  stripe_cli_config:
 
 

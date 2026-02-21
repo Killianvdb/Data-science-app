@@ -23,6 +23,7 @@ class PlanSeeder extends Seeder
                 'monthly_limit' => 10,
                 'max_total_mb_per_transaction' => 2,
                 'max_files_per_transaction' => 2,
+                'stripe_price_id' => null,
             ]
         );
 
@@ -34,6 +35,7 @@ class PlanSeeder extends Seeder
                 'monthly_limit' => 50,
                 'max_total_mb_per_transaction' => 10,
                 'max_files_per_transaction' => 5,
+                'stripe_price_id' => env('STRIPE_PRICE_MEDIUM'),
             ]
         );
 
@@ -45,6 +47,7 @@ class PlanSeeder extends Seeder
                 'monthly_limit' => 1000,
                 'max_total_mb_per_transaction' => 20,
                 'max_files_per_transaction' => 10,
+                'stripe_price_id' => env('STRIPE_PRICE_PRO'),
             ]
         );
     }
