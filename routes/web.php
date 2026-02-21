@@ -8,6 +8,7 @@ use App\Http\Controllers\DatasetController;
 use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\AiChatController;
 
 /*
 |--------------------------------------------------------------------------
@@ -30,8 +31,19 @@ Route::post('/contact', [ContactController::class, 'submit'])->name('contact.sub
 | Authenticated Routes
 |--------------------------------------------------------------------------
 */
-
+Route::prefix('ai-chat')->name('ai-chat.')->group(function () {
+    Route::get('/',            [AiChatController::class, 'index'])      ->name('index');
+    Route::post('/chat',       [AiChatController::class, 'chat'])       ->name('chat');
+    Route::post('/upload',     [AiChatController::class, 'uploadCsv'])  ->name('upload');
+    Route::post('/clear',      [AiChatController::class, 'clearHistory'])->name('clear');
+    Route::post('/remove-file',[AiChatController::class, 'removeFile']) ->name('remove-file');
+    Route::post('/clear-all',  [AiChatController::class, 'clearAll'])   ->name('clear-all');
+});
 Route::middleware('auth')->group(function () {
+
+    
+
+
 
     // Visualization Routes
     Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
