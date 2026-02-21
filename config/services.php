@@ -43,5 +43,8 @@ return [
         // Maximum execution time in seconds
         'timeout' => env('PYTHON_TIMEOUT', 3600),
     ],
+    'groq' => [
+    'api_key' => env('GROQ_API_KEY'),
+],
 
 ];

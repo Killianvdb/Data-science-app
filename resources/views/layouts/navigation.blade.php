@@ -21,16 +21,14 @@
                             {{ __('Clean My Data') }}
                         </x-nav-link>
 
-                        <x-nav-link :href="route('visualise.index')" :active="request()->routeIs('visualise.*')">
-                            {{ __('Visualisation') }}
-                        </x-nav-link>
+                        
 
                         <x-nav-link :href="route('datasets.files')" :active="request()->routeIs('datasets.files')">
                             {{ __('My Datasets') }}
                         </x-nav-link>
 
-                        <x-nav-link :href="route('pricing')" :active="request()->routeIs('pricing')">
-                            {{ __('Pricing') }}
+                        <x-nav-link :href="route('ai-chat.index')" :active="request()->routeIs('ai-chat.index')">
+                            {{ __('Data AI Assistant') }}
                         </x-nav-link>
 
                         @if(auth()->check() && auth()->user()->role === 'admin')
