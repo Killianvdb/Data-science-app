@@ -35,10 +35,12 @@ class RegisteredUserController extends Controller
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'user_type' => ['nullable', 'string', 'max:50'],
-            'phone_number' => ['nullable','regex:/^\+?[0-9\s\-]{7,20}$/'],
+            'phone_number' => ['nullable', 'string', 'regex:/^\+?[0-9\s\-]{7,20}$/'],
         ]);
 
-        $free = Plan::where('slug','free')->firstOrFail();
+        $freePlanId = Plan::where('slug', 'free')->value('id');
+
+        abort_if(!$freePlanId, 500, 'Free plan not found');
 
         $user = User::create([
             'name' => $request->name,
@@ -48,7 +50,7 @@ class RegisteredUserController extends Controller
             'user_type' => $request->user_type,
             'phone_number' => $request->phone_number,
             'is_active' => true,
-            'plan_id' => $free->id,
+            'plan_id' => $freePlanId,
             'files_used_this_month' => 0,
         ]);
 
