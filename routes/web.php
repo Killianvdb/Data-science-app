@@ -1,4 +1,5 @@
-<?php
+
+  <?php
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ContactController;
@@ -57,6 +58,16 @@ Route::middleware('auth')->group(function () {
 
         // File Download
         Route::get('/download/{filename}/{alias?}', [DatasetController::class, 'download'])->name('download');
+    });
+
+        // for the visualisation
+
+        Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
+        Route::post('/visualise', [VisualizationController::class, 'generate'])->name('visualise.generate');
+
+        Route::get('/report/{id}', [VisualizationController::class, 'show'])->name('visualise.show');
+        Route::post('/report/{id}', [VisualizationController::class, 'update'])->name('visualise.update');
+
 
         // Optional: Add these new routes for better UX
         // API endpoint to check processing status (if you implement async processing later)
@@ -80,8 +91,6 @@ Route::middleware('auth')->group(function () {
         Route::patch('users/{user}/role', [UserController::class,'updateRole'])->name('users.updateRole');
         Route::delete('users/{user}', [UserController::class,'destroy'])->name('users.destroy');
         Route::get('users/search', [UserController::class,'search'])->name('users.search');
-        Route::patch('users/{user}/plan', [UserController::class,'updatePlan'])->name('users.plan');
     });
-});
 
 require __DIR__.'/auth.php';

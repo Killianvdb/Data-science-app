@@ -25,25 +25,24 @@ def read_dataset(path: Path) -> pd.DataFrame:
 
 
 # hier maken wij een "placeholder" afbeelding als er geen data is
-def save_placeholder(outpath: Path, text: str):
-    plt.figure(figsize=(8, 4))
+
+def save_placeholder(outdir, filename, text):
+    plt.figure(figsize=(10, 4))
     plt.text(0.5, 0.5, text, ha="center", va="center")
     plt.axis("off")
     plt.tight_layout()
-    plt.savefig(outpath, dpi=150)
+    plt.savefig(os.path.join(outdir, filename), dpi=150)
     plt.close()
 
 
-# A) Missing values bar chart
-def plot_missing_bar(df: pd.DataFrame, outdir: Path) -> str:
-    outpath = outdir / "missing_bar.png"
-
+# Missing values bar chart
+def plot_missing_bar(df, outdir, filename="missing_values.png") -> bool:
     missing = df.isna().sum()
     missing = missing[missing > 0].sort_values(ascending=False)
 
     if len(missing) == 0:
-        save_placeholder(outpath, "No missing values")
-        return outpath.name
+        save_placeholder(outdir, filename, "No missing values")
+        return False
 
     plt.figure(figsize=(10, 5))
     plt.bar(missing.index.astype(str), missing.values)
@@ -51,113 +50,201 @@ def plot_missing_bar(df: pd.DataFrame, outdir: Path) -> str:
     plt.title("Missing values per column")
     plt.ylabel("Missing count")
     plt.tight_layout()
-    plt.savefig(outpath, dpi=150)
+    plt.savefig(os.path.join(outdir, filename), dpi=150)
     plt.close()
+    return True
 
-    return outpath.name
+
+def plot_dtypes(df, outdir, filename="dtypes.png") -> bool:
+    dtype_counts = df.dtypes.astype(str).value_counts()
+
+    if dtype_counts.empty:
+        save_placeholder(outdir, filename, "No columns")
+        return False
+
+    plt.figure(figsize=(7, 4))
+    plt.bar(dtype_counts.index.astype(str), dtype_counts.values)
+    plt.title("Column types")
+    plt.ylabel("Number of columns")
+    plt.xticks(rotation=30, ha="right")
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir, filename), dpi=150)
+    plt.close()
+    return True
 
 
-# B) Lijn grafiek (eerste numerieke kolom)
-def plot_line_chart(df: pd.DataFrame, outdir: Path) -> str:
-    outpath = outdir / "line_chart.png"
+def plot_numeric_histogram(df: pd.DataFrame, outdir: str, col: str | None, filename: str = "histogram.png"):
 
-    num_cols = list(df.select_dtypes(include="number").columns)
-    if len(num_cols) == 0:
-        save_placeholder(outpath, "No numeric columns for line chart")
-        return outpath.name
+    """
+    Histogram voor een numerieke kolom.
 
-    col = num_cols[0]
-    series = df[col].dropna()
-
-    if series.empty:
-        save_placeholder(outpath, f"No numeric data in '{col}'")
-        return outpath.name
+    - We zoeken eerst alle numerieke kolommen.
+    - Als de user geen kolom kiest, nemen we de eerste numerieke kolom.
+    - Als er geen numerieke kolommen zijn (of kolom is leeg) -> tekst in de plot.
+    """
+    numeric_cols = df.select_dtypes(include="number").columns.astype(str).tolist()
 
     plt.figure(figsize=(10, 5))
-    plt.plot(series.values)  # x = index, y = values
-    plt.title(f"Line chart: {col}")
-    plt.xlabel("Index")
-    plt.ylabel(str(col))
-    plt.tight_layout()
-    plt.savefig(outpath, dpi=150)
+
+    if not numeric_cols:
+        plt.text(0.5, 0.5, "No numeric columns", ha="center", va="center")
+        plt.axis("off")
+    else:
+        if col is None or col not in numeric_cols:
+            col = numeric_cols[0]
+
+        series = df[col].dropna()
+        if series.empty:
+            plt.text(0.5, 0.5, f"No numeric data in '{col}'", ha="center", va="center")
+            plt.axis("off")
+        else:
+            plt.hist(series, bins=10)
+            plt.title(f"Histogram of {col}")
+            plt.xlabel(col)
+            plt.ylabel("Frequency")
+            plt.tight_layout()
+
+    plt.savefig(os.path.join(outdir, filename), dpi=150)
     plt.close()
 
-    return outpath.name
 
 
-# C) Taart grafiek (eerste tekst/categorie kolom)
-def plot_pie_chart(df: pd.DataFrame, outdir: Path) -> str:
-    outpath = outdir / "pie_chart.png"
+# Lijn grafiek (eerste numerieke kolom)
+def plot_line_chart(df: pd.DataFrame, outdir: str, col: str | None, filename: str = "line.png"):
+    numeric_cols = df.select_dtypes(include="number").columns.astype(str).tolist()
 
-    cat_cols = list(df.select_dtypes(include="object").columns)
-    if len(cat_cols) == 0:
-        save_placeholder(outpath, "No categorical columns for pie chart")
-        return outpath.name
+    plt.figure(figsize=(10, 5))
 
-    col = cat_cols[0]
-    counts = df[col].astype(str).str.strip().value_counts()
+    if not numeric_cols:
+        plt.text(0.5, 0.5, "No numeric columns", ha="center", va="center")
+        plt.axis("off")
+    else:
+        if col is None or col not in numeric_cols:
+            col = numeric_cols[0]
 
-    if counts.empty:
-        save_placeholder(outpath, f"No categorical data in '{col}'")
-        return outpath.name
+        series = df[col]
+        plt.plot(series.index, series.values)
+        plt.title(f"Line chart of {col}")
+        plt.xlabel("Row index")
+        plt.ylabel(col)
+        plt.tight_layout()
 
-    # neem top 6 en bundel de rest als "Other" (anders te druk)
-    top = counts.head(6)
-    rest = counts.iloc[6:].sum()
-    if rest > 0:
-        top["Other"] = rest
+    plt.savefig(os.path.join(outdir, filename), dpi=150)
+    plt.close()
+
+
+
+# Taart grafiek (eerste tekst/categorie kolom)
+def plot_pie_chart(df: pd.DataFrame, outdir: str, col: str | None, filename: str = "pie.png"):
+
+    cat_cols = df.select_dtypes(include=["object", "category", "bool"]).columns.astype(str).tolist()
 
     plt.figure(figsize=(8, 6))
-    plt.pie(top.values, labels=top.index.astype(str), autopct="%1.1f%%")
-    plt.title(f"Pie chart: {col}")
-    plt.tight_layout()
-    plt.savefig(outpath, dpi=150)
+
+    if not cat_cols:
+        plt.text(0.5, 0.5, "No categorical columns", ha="center", va="center")
+        plt.axis("off")
+    else:
+        if col is None or col not in cat_cols:
+            col = cat_cols[0]
+
+        s = df[col].astype(str).fillna("NaN")
+        counts = s.value_counts()
+
+        if len(counts) > 10:
+            top = counts.iloc[:10]
+            rest = counts.iloc[10:].sum()
+            counts = top.copy()
+            counts["Other"] = rest
+
+        plt.pie(counts.values, labels=counts.index.astype(str), autopct="%1.1f%%")
+        plt.title(f"Pie chart of {col}")
+        plt.tight_layout()
+
+    plt.savefig(os.path.join(outdir, filename), dpi=150)
     plt.close()
-
-    return outpath.name
-
 
 # Summary bouwen
 def build_summary(df: pd.DataFrame) -> dict:
-    # duplicate check (strip spaces in tekst)
+
     df_norm = df.copy()
-    for c in df_norm.select_dtypes(include="object").columns:
+
+    for c in df_norm.select_dtypes(include=["object", "category", "bool"]).columns:
         df_norm[c] = df_norm[c].astype(str).str.strip()
+
+    numeric_cols = df.select_dtypes(include="number").columns.astype(str).tolist()
+    cat_cols = df.select_dtypes(include=["object", "category", "bool"]).columns.astype(str).tolist()
 
     return {
         "rows": int(df.shape[0]),
         "columns": int(df.shape[1]),
         "missing_total": int(df.isna().sum().sum()),
         "duplicate_rows": int(df_norm.duplicated(keep=False).sum()),
+
+        # nodig voor dropdowns in Blade
+        "column_names": [str(c) for c in df.columns],
+        "numeric_columns": numeric_cols,
+        "categorical_columns": cat_cols,
     }
 
+CHART_FILES = {
+    "missing_values": "missing_values.png",
+    "dtypes": "dtypes.png",
+    "histogram": "histogram.png",
+    "pie": "pie.png",
+    "line": "line.png",
+}
 
-def run_visualization(file_path: str, outdir: str):
-    outdir = Path(outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
+def parse_options() -> dict:
+    # argv: visualize.py input outdir [options_json]
+    if len(sys.argv) >= 4:
+        try:
+            return json.loads(sys.argv[3])
+        except Exception:
+            return {}
+    return {}
 
-    df = read_dataset(Path(file_path))
 
-    # 3 grafieken maken
-    missing_file = plot_missing_bar(df, outdir)
-    line_file = plot_line_chart(df, outdir)
-    pie_file = plot_pie_chart(df, outdir)
+def run_visualization(file_path, outdir):
+    os.makedirs(outdir, exist_ok=True)
 
+    df = read_dataset(file_path)
     summary = build_summary(df)
-    summary["charts"] = {
-        "missing": missing_file,
-        "line": line_file,
-        "pie": pie_file,
-    }
 
-    with open(outdir / "summary.json", "w", encoding="utf-8") as f:
+    options = parse_options()
+    selected = options.get("charts") or ["missing_values", "dtypes"]
+    chart_columns = options.get("chart_columns") or {}
+
+    charts_out = {}
+
+    if "missing_values" in selected:
+        plot_missing_bar(df, outdir, CHART_FILES["missing_values"])
+        charts_out["missing_values"] = CHART_FILES["missing_values"]
+
+    if "dtypes" in selected:
+        plot_dtypes(df, outdir, CHART_FILES["dtypes"])
+        charts_out["dtypes"] = CHART_FILES["dtypes"]
+
+    if "histogram" in selected:
+        plot_numeric_histogram(df, outdir, chart_columns.get("histogram"), CHART_FILES["histogram"])
+        charts_out["histogram"] = CHART_FILES["histogram"]
+
+    if "pie" in selected:
+        plot_pie_chart(df, outdir, chart_columns.get("pie"), CHART_FILES["pie"])
+        charts_out["pie"] = CHART_FILES["pie"]
+
+    if "line" in selected:
+        plot_line_chart(df, outdir, chart_columns.get("line"), CHART_FILES["line"])
+        charts_out["line"] = CHART_FILES["line"]
+
+    summary["charts"] = charts_out
+    summary["chart_columns"] = chart_columns
+
+    with open(os.path.join(outdir, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
-    print(json.dumps({"status": "ok"}))
-
-
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    if len(sys.argv) < 3:
         print("Usage: python visualize.py <input_file> <outdir>")
         sys.exit(1)
 
