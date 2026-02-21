@@ -8,7 +8,8 @@ use App\Http\Controllers\DatasetController;
 use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\UserController;
-use App\Http\Controllers\AiChatController;
+use App\Http\Controllers\StripeWebhookController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -80,7 +81,21 @@ Route::middleware('auth')->group(function () {
 
     // Payments and subscriptions
     Route::get('/pricing', [SubscriptionController::class, 'index'])->name('pricing');
-    Route::post('/subscription/change', [SubscriptionController::class, 'change'])->name('subscription.change');
+    //Route::post('/subscription/change', [SubscriptionController::class, 'change'])->name('subscription.change');
+    Route::post('/subscription/checkout', [SubscriptionController::class, 'checkout'])
+        ->name('subscription.checkout');
+
+    Route::get('/subscription/success', [SubscriptionController::class, 'success'])
+        ->name('subscription.success');
+
+    Route::get('/subscription/cancel', [SubscriptionController::class, 'cancel'])
+        ->name('subscription.cancel');
+
+    Route::get('/billing/portal', function (\Illuminate\Http\Request $request) {
+        return $request->user()->redirectToBillingPortal(route('pricing'));
+    })->name('billing.portal');
+
+
 
     /*
     |--------------------------------------------------------------------------
@@ -95,5 +110,8 @@ Route::middleware('auth')->group(function () {
         Route::patch('users/{user}/plan', [UserController::class,'updatePlan'])->name('users.plan');
     });
 });
+
+
+Route::post('/stripe/webhook', [StripeWebhookController::class, 'handleWebhook']);
 
 require __DIR__.'/auth.php';

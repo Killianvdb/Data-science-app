@@ -20,7 +20,7 @@
                 $isCurrent = ($currentPlanId ?? null) === $plan->id;
             @endphp
 
-                <form method="POST" action="{{ route('subscription.change') }}">
+                <form method="POST" action="{{ route('subscription.checkout') }}">
                     @csrf
                     <input type="hidden" name="plan_slug" value="{{ $plan->slug }}">
 
