@@ -52,21 +52,22 @@
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th @click="sort('id')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                            <th @click="sort('name')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                            <th @click="sort('email')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                            <th @click="sort('role')" class="cursor-pointer px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th @click="sort('id')" class="cursor-pointer px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                            <th @click="sort('name')" class="cursor-pointer px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th @click="sort('email')" class="cursor-pointer px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                            <th @click="sort('role')" class="cursor-pointer px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Plan</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
 
                     <tbody class="bg-white divide-y divide-gray-200">
                         <template x-for="user in users" :key="user.id">
                             <tr class="hover:bg-gray-50">
-                                <td class="px-6 py-4 whitespace-nowrap" x-text="user.id"></td>
-                                <td class="px-6 py-4 whitespace-nowrap" x-text="user.name"></td>
-                                <td class="px-6 py-4 whitespace-nowrap" x-text="user.email"></td>
-                                <td class="px-6 py-4 whitespace-nowrap">
+                                <td class="px-6 py-4 whitespace-nowrap text-center align-middle" x-text="user.id"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-center align-middle" x-text="user.name"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-center align-middle" x-text="user.email"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-center align-middle">
                                     <template x-if="user.id !== 1 && user.id !== {{ auth()->id() }}">
                                         <select x-model="user.role" @change="toggleRole(user)"
                                                 class="border rounded-lg px-7 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
@@ -78,7 +79,21 @@
                                         <span x-text="user.role"></span>
                                     </template>
                                 </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
+                                <td class="px-6 py-4 whitespace-nowrap text-center align-middle">
+                                    <template x-if="user.id !== 1 && user.id !== {{ auth()->id() }}">
+                                        <select x-model="user.plan_id" @change="updatePlan(user)"
+                                            class="border rounded-lg px-7 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                                            <template x-for="plan in plans" :key="plan.id">
+                                                <option :value="plan.id" x-text="plan.name"></option>
+                                            </template>
+                                        </select>
+                                    </template>
+
+                                    <template x-if="user.id === 1 || user.id === {{ auth()->id() }}">
+                                        <span class="text-gray-700" x-text="user.plan?.name ?? '—'"></span>
+                                    </template>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-center align-middle">
                                     <template x-if="user.id !== 1">
                                         <button @click="deleteUser(user)"
                                                 class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded">Delete</button>
@@ -113,9 +128,12 @@
     </div>
 
     <script>
+        window.__PLANS__ = @json(\App\Models\Plan::orderBy('price')->get(['id','name']));
+
     function userTable() {
         return {
             users: [],
+            plans: window.__PLANS__ || [],
             search: '',
             roleFilter: '',
             sortField: 'id',
@@ -179,6 +197,33 @@
 
                 }catch(e){
                     alert('Error updating role');
+                    await this.fetchUsers();
+                }
+            },
+
+            async updatePlan(user){
+                if(user.id===1) return;
+
+                try{
+                    let res = await fetch(`/admin/users/${user.id}/plan`,{
+                        method:'PATCH',
+                        headers:{
+                            'Content-Type':'application/json',
+                            'X-CSRF-TOKEN':'{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({ plan_id: user.plan_id })
+                    });
+
+                    let data = await res.json();
+
+                    if(data.success){
+                        alert(data.success);
+                    } else {
+                        alert(data.error || 'Error updating plan');
+                        await this.fetchUsers();
+                    }
+                }catch(e){
+                    alert('Error updating plan');
                     await this.fetchUsers();
                 }
             },
