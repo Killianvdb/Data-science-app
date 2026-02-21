@@ -214,69 +214,65 @@ def clean_basic(df, row_thresh=0.5, col_thresh=0.3):
     return df
 
 def clean_dates(df, decisions):
-    """Convertit les colonnes dates avec détection automatique du format"""
+
+    """
+    Version RE-STABILISÉE basée sur votre logique originale.
+    """
     date_columns = {}
-    
+
+    formats_to_test = [
+        ('%Y-%m-%d', 'YYYY-MM-DD'),
+        ('%d/%m/%Y', 'DD/MM/YYYY'),
+        ('%m/%d/%Y', 'MM/DD/YYYY'),
+        ('%Y/%m/%d', 'YYYY/MM/DD'),
+        ('%d-%m-%Y', 'DD-MM-YYYY'),
+    ]
+
     for col, decision in decisions.items():
-        if col not in df.columns:
+        if col not in df.columns or not decision.get('is_date'):
             continue
-        
-        if decision.get('is_date'):
-            print(f"   📅 Date: {col}", file=sys.stderr)
-            
-            sample = df[col].dropna().head(100)
-            if len(sample) == 0:
-                print(f"      ⚠️  Empty column, ignored", file=sys.stderr)
-                continue
-            
-            # Tester plusieurs formats (ordre important: plus spécifique d'abord)
-            formats_to_test = [
-                ('%Y-%m-%d', 'YYYY-MM-DD'),
-                ('%d/%m/%Y', 'DD/MM/YYYY'),       # ← AVANT MM/DD
-                ('%m/%d/%Y', 'MM/DD/YYYY'),
-                ('%Y/%m/%d', 'YYYY/MM/DD'),
-                ('%d-%m-%Y', 'DD-MM-YYYY'),
-                ('%m-%d-%Y', 'MM-DD-YYYY'),
-                (None, 'Auto (pandas)'),
-            ]
-            
-            best_format = None
-            best_success_rate = 0
-            best_name = 'Auto'
-            
-            for fmt, name in formats_to_test:
-                try:
-                    if fmt is None:
-                        test_result = pd.to_datetime(sample, errors='coerce', dayfirst=True)  # ← dayfirst=True
-                    else:
-                        test_result = pd.to_datetime(sample, format=fmt, errors='coerce')
-                    success_rate = test_result.notna().sum() / len(sample)
-                except:
-                    success_rate = 0
-                
-                if success_rate > best_success_rate:
-                    best_success_rate = success_rate
-                    best_format = fmt
-                    best_name = name
-            
-            print(f"      Selected format: {best_name} ({best_success_rate*100:.1f}% success)", file=sys.stderr)
-            
-            # Convertir toute la colonne
-            if best_format is None:
-                df[col] = pd.to_datetime(df[col], errors='coerce', dayfirst=True)
-            else:
-                df[col] = pd.to_datetime(df[col], format=best_format, errors='coerce')
-            
-            failed = df[col].isna().sum()
-            if failed > 0:
-                print(f"      ⚠️ {failed} invalid dates → left NULL", file=sys.stderr)
-            
-            if df[col].notna().sum() > 0:
-                date_columns[col] = df[col].copy()
-                df = df.drop(columns=[col])
-            else:
-                print(f"      ❌ Total failure, column ignored", file=sys.stderr)
-    
+
+        print(f"   📅 Date processing: {col}", file=sys.stderr)
+
+        # On vérifie si la colonne est vide pour éviter l'erreur de max() sur liste vide
+        if df[col].dropna().empty:
+            continue
+
+        # 1. Identification du format dominant
+        valid_data = df[col].dropna().astype(str)
+        test_sample = valid_data.head(500)
+        format_scores = []
+        for fmt, name in formats_to_test:
+            successes = pd.to_datetime(test_sample, format=fmt, errors='coerce').notna().sum()
+            format_scores.append({'fmt': fmt, 'name': name, 'score': successes})
+
+        format_scores.sort(key=lambda x: x['score'], reverse=True)
+        best = format_scores[0]
+
+        # 2. Tiered Parsing (On garde votre logique de cumul)
+        parsed_dates = pd.Series(pd.NaT, index=df.index)
+        for f in format_scores:
+            still_null = parsed_dates.isna() & df[col].notna()
+            if not still_null.any(): break
+
+            # Utilisation de .loc pour éviter les avertissements SettingWithCopy
+            parsed_chunk = pd.to_datetime(df.loc[still_null, col], format=f['fmt'], errors='coerce')
+            parsed_dates.update(parsed_chunk)
+
+        # 3. Standardisation et stockage (Logique d'origine)
+        output_format = best['fmt'] if best['score'] > 0 else '%Y-%m-%d'
+        mask = parsed_dates.notna()
+
+        # On recrée la colonne proprement
+        new_date_series = pd.Series(None, index=df.index, dtype='object')
+        new_date_series.loc[mask] = parsed_dates[mask].dt.strftime(output_format)
+
+        # On remplit le dictionnaire comme avant
+        date_columns[col] = new_date_series
+
+        # On supprime la colonne originale pour que le script puisse la réinsérer plus tard
+        df = df.drop(columns=[col])
+
     return df, date_columns
 
 def clean_prices(df):
@@ -498,10 +494,11 @@ class DataCleaner:
         
 
         
-        # 8. Réintégrer les dates (format ISO)
-        for col, date_series in date_columns.items():
-            self.df[col] = date_series.dt.strftime('%Y-%m-%d')
-            print(f"   ✅ Date re-integrated: {col}", file=sys.stderr)
+      # 8. Réintégrer les dates (DÉJÀ HARMONISÉES)
+        # CHANGEMENT ICI : On ne fait plus .dt.strftime() car clean_dates l'a déjà fait
+        for col, formatted_date_series in date_columns.items():
+            self.df[col] = formatted_date_series
+            print(f"   ✅ Date re-integrated (harmonized): {col}", file=sys.stderr)
         
         # 9. Restaurer l'ordre original des colonnes
         available_columns = [col for col in original_column_order if col in self.df.columns]
