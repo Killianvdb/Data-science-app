@@ -18,3 +18,5 @@ venv
 .vscode
 .idea
 /public/storage
+public/storage
+*.log
