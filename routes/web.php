@@ -9,6 +9,8 @@ use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\StripeWebhookController;
+use App\Http\Controllers\AiChatController;
+
 
 
 /*

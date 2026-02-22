@@ -1,9 +1,4 @@
 <x-app-layout>
-    <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            {{ __('AI Chat') }}
-        </h2>
-    </x-slot>
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -28,13 +23,14 @@
 
     .chat-layout {
         display: grid;
-        grid-template-columns: 300px 1fr;
-        height: 82vh;
-        border-radius: 16px;
+        grid-template-columns: 320px 1fr;
+        height: calc(100vh - 60px);
+        border-radius: 0;
         overflow: hidden;
         font-family: var(--font-main);
         color: var(--text);
         background: var(--bg);
+        margin: -2rem -2.5rem -1.5rem -2.5rem;
     }
 
     /* ── Sidebar ── */
@@ -159,11 +155,14 @@
 
     /* ── Messages ── */
     .messages-container {
-        flex: 1; overflow-y: auto; padding: 18px 22px;
+        flex: 1; overflow-y: scroll; padding: 18px 22px;
         display: flex; flex-direction: column; gap: 14px; scroll-behavior: smooth;
+        min-height: 0; /* critical — without this flex children won't scroll */
     }
-    .messages-container::-webkit-scrollbar { width: 5px; }
+    .messages-container::-webkit-scrollbar { width: 6px; }
+    .messages-container::-webkit-scrollbar-track { background: transparent; }
     .messages-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .messages-container::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
     .empty-state {
         flex: 1; display: flex; flex-direction: column;
@@ -200,8 +199,9 @@
     .bubble {
         max-width: 74%; padding: 11px 15px; border-radius: 13px;
         font-size: 0.875rem; line-height: 1.65;
+        word-wrap: break-word; overflow-wrap: break-word;
     }
-    .bubble.ai   { background: var(--ai-bg); border: 1px solid var(--border); border-top-left-radius: 4px; }
+    .bubble.ai   { max-width: 85%; background: var(--ai-bg); border: 1px solid var(--border); border-top-left-radius: 4px; }
     .bubble.user { background: var(--user-bg); border: 1px solid rgba(123,97,255,0.25); border-top-right-radius: 4px; }
     .bubble.ai strong { color: var(--accent); }
     .bubble.ai code {
