@@ -81,44 +81,16 @@ class GeminiLLM:
 
 
 def _safe_stderr(*args, **kwargs):
-    """Print vers stderr compatible Windows (gère les emojis/accents)."""
-    import io
-    kwargs['file'] = sys.stderr
+    """Print vers stderr compatible Windows."""
+    text = ' '.join(str(a) for a in args)
     try:
-        _safe_stderr(*args, **kwargs)
+        print(text, file=sys.stderr)
     except UnicodeEncodeError:
-        # Fallback : encoder en ASCII avec remplacement
-        text = ' '.join(str(a) for a in args)
         safe = text.encode('ascii', errors='replace').decode('ascii')
-        print(safe)
+        print(safe, file=sys.stderr)
 
 # ============================================================================
 # GEMINI LLM CLIENT (remplace Gemini — urllib built-in, aucun package requis)
-# ============================================================================
-
-class GeminiLLM:
-    """Client Gemini 2.0 Flash via REST.
-    Variable d'environnement requise : GEMINI_API_KEY
-    Interface identique a l'ancien GeminiLLM : .available, .model, .call()
-    """
-    _API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-
-    def call(self, prompt, max_tokens=2000):
-        if not self.available:
-            return None
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0,
-                max_tokens=max_tokens,
-                response_format={"type": "json_object"}
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            _safe_stderr(f"⚠️  Erreur LLM: {e}")
-            return None
-
 # ============================================================================
 # HELPERS
 # ============================================================================
@@ -286,132 +258,383 @@ If none found: {{"join_pairs": []}}"""
 
 # ============================================================================
 # 2. VALIDATOR
+
 # ============================================================================
 
-class Validator:
-    def __init__(self, llm: GeminiLLM, rules_path=None):
-        self.llm = llm
-        self.custom_rules = self._load_rules(rules_path)
+# ============================================================================
+# 2. CONTEXT-AWARE VALIDATOR v2 (universal — no hardcoded domains)
+# ============================================================================
+"""
+CONTEXT-AWARE VALIDATOR v2.0
+==============================
+Approche universelle : le LLM analyse les données et décide lui-même
+des règles de validation sans domaine prédéfini.
 
-    def _load_rules(self, path):
-        if not path or not os.path.exists(path):
+Stratégie à 3 niveaux :
+  1. LLM universel — regarde les données et génère les règles adaptées
+  2. Statistique pur — IQR + zscore sans connaissance du domaine
+  3. Custom — rules.json fourni par l'utilisateur (override tout)
+
+Principe fondamental :
+  - On ne SUPPRIME jamais sans être sûr (action "flag" par défaut)
+  - Le LLM justifie chaque règle (pourquoi cette valeur est suspecte)
+  - L'humain garde le dernier mot via les colonnes FLAG_*
+"""
+
+
+
+# ============================================================================
+# PROFIL ENRICHI — donne le maximum de contexte au LLM
+# ============================================================================
+
+def build_rich_profile(df: pd.DataFrame, filename: str = '') -> dict:
+    """
+    Construit un profil riche du dataset pour le LLM.
+    Plus le LLM a d'informations, meilleures sont ses règles.
+    """
+    profile = {
+        'filename': filename,
+        'total_rows': len(df),
+        'total_columns': len(df.columns),
+        'columns': {}
+    }
+
+    for col in df.columns:
+        series = df[col].dropna()
+        info = {
+            'name': col,
+            'dtype': str(df[col].dtype),
+            'null_count': int(df[col].isna().sum()),
+            'null_pct': round(df[col].isna().sum() / len(df) * 100, 1),
+            'unique_count': int(df[col].nunique()),
+            'sample_values': [str(v) for v in series.head(8).tolist()],
+        }
+
+        if pd.api.types.is_numeric_dtype(df[col]) and len(series) > 0:
+            info.update({
+                'min':    round(float(series.min()), 4),
+                'max':    round(float(series.max()), 4),
+                'mean':   round(float(series.mean()), 4),
+                'median': round(float(series.median()), 4),
+                'std':    round(float(series.std()), 4),
+                'negative_count': int((series < 0).sum()),
+                'zero_count':     int((series == 0).sum()),
+                # Percentiles pour donner la distribution
+                'p5':   round(float(series.quantile(0.05)), 4),
+                'p25':  round(float(series.quantile(0.25)), 4),
+                'p75':  round(float(series.quantile(0.75)), 4),
+                'p95':  round(float(series.quantile(0.95)), 4),
+            })
+
+        profile['columns'][col] = info
+
+    return profile
+
+
+# ============================================================================
+# DÉTECTION STATISTIQUE UNIVERSELLE (sans connaissance du domaine)
+# ============================================================================
+
+def detect_statistical_outliers(df: pd.DataFrame, iqr_multiplier: float = 3.0) -> list:
+    """
+    Détecte les outliers statistiques via IQR.
+    Universel — fonctionne pour n'importe quel type de données.
+    
+    iqr_multiplier=3.0 = outliers sévères seulement (conservateur)
+    iqr_multiplier=1.5 = outliers modérés (agressif)
+    """
+    rules = []
+
+    for col in df.select_dtypes(include=[np.number]).columns:
+        series = df[col].dropna()
+        if len(series) < 10:
+            continue
+
+        q1   = series.quantile(0.25)
+        q3   = series.quantile(0.75)
+        iqr  = q3 - q1
+
+        if iqr == 0:
+            # Colonne quasi-constante — outliers = valeurs différentes
+            mode_val = series.mode()[0] if len(series.mode()) > 0 else 0
+            outliers = (series != mode_val).sum()
+            if outliers > 0 and outliers < len(series) * 0.05:
+                rules.append({
+                    'rule_id':     f'stat_constant_{col}',
+                    'description': f'{col}: {outliers} values differ from constant {mode_val}',
+                    'column':      col,
+                    'condition':   f"df['{col}'] != {mode_val}",
+                    'fix_action':  'flag',
+                    'source':      'statistical',
+                    'justification': 'Column is nearly constant, outliers may be errors'
+                })
+            continue
+
+        lower = q1 - iqr_multiplier * iqr
+        upper = q3 + iqr_multiplier * iqr
+
+        n_low  = int((series < lower).sum())
+        n_high = int((series > upper).sum())
+
+        if n_low > 0:
+            pct = round(n_low / len(series) * 100, 1)
+            rules.append({
+                'rule_id':     f'stat_low_{col}',
+                'description': f'{col}: {n_low} values ({pct}%) below {lower:.2f} (Q1 - {iqr_multiplier}×IQR)',
+                'column':      col,
+                'condition':   f"df['{col}'] < {lower}",
+                'fix_action':  'flag',
+                'source':      'statistical',
+                'justification': f'Values below Q1-{iqr_multiplier}xIQR are statistical outliers'
+            })
+
+        if n_high > 0:
+            pct = round(n_high / len(series) * 100, 1)
+            rules.append({
+                'rule_id':     f'stat_high_{col}',
+                'description': f'{col}: {n_high} values ({pct}%) above {upper:.2f} (Q3 + {iqr_multiplier}×IQR)',
+                'column':      col,
+                'condition':   f"df['{col}'] > {upper}",
+                'fix_action':  'flag',
+                'source':      'statistical',
+                'justification': f'Values above Q3+{iqr_multiplier}xIQR are statistical outliers'
+            })
+
+    return rules
+
+
+# ============================================================================
+# VALIDATEUR UNIVERSEL
+# ============================================================================
+
+class ContextAwareValidator:
+    """
+    Validateur universel : s'adapte à N'IMPORTE quel type de données.
+    
+    Le LLM reçoit un profil complet et décide lui-même :
+    - Quel est le contexte probable de ces données
+    - Quelles valeurs sont suspectes dans CE contexte
+    - Quelle action prendre (flag, abs, null, drop)
+    - Pourquoi (justification incluse dans le rapport)
+    
+    Si le LLM n'est pas disponible :
+    - Détection statistique pure (IQR) sans connaissance du domaine
+    """
+
+    def __init__(self, llm, rules_path=None):
+        self.llm = llm
+        self.custom_rules = self._load_custom_rules(rules_path)
+
+    def _load_custom_rules(self, path):
+        if not path:
             return []
         try:
             with open(path) as f:
-                rules = json.load(f).get("rules", [])
-            _safe_stderr(f"   📋 {len(rules)} règles custom chargées")
-            return rules
-        except Exception as e:
-            _safe_stderr(f"   ⚠️  Erreur rules.json: {e}")
+                return json.load(f).get('rules', [])
+        except Exception:
             return []
 
-    def generate_llm_rules(self, df):
+    # ── LLM universel ─────────────────────────────────────────────────────
+
+    def generate_llm_rules(self, df: pd.DataFrame, filename: str = '') -> tuple:
+        """
+        Le LLM analyse le dataset et génère des règles adaptées.
+        Retourne (rules, context_description).
+        """
         if not self.llm.available:
-            return []
-        profile = create_profile(df)
-        prompt = f"""Generate validation rules for CLEAR business errors in this dataset.
+            return [], 'LLM unavailable'
 
-Profile:
+        profile = build_rich_profile(df, filename)
+
+        prompt = f"""You are a data quality expert. Analyze this dataset and generate validation rules.
+
+Dataset profile:
 {json.dumps(profile, indent=2)}
 
-STRICT CONSTRAINTS:
-1. ONLY generate rules for NUMERIC or DATE columns
-2. NEVER generate rules on text/string/categorical columns (Status, Category, Name, etc.)
-3. Only flag mathematically impossible values
-4. Use fix_action "flag" for cross-column checks, "abs" for impossible negatives, "drop" for missing required keys
+YOUR TASK:
+1. First, infer what this dataset is about from column names, filename, and sample values
+2. Based on that understanding, generate validation rules for suspicious values
+3. For each rule, explain WHY the value is suspicious in this specific context
 
-ALLOWED rule types:
-- Negative values impossible: prices, ages, quantities, weights
-- Date logic errors: delivery_date < order_date, end < start
-- Required numeric ID fields that are NULL
+KEY PRINCIPLE:
+- You don't know the domain in advance — you must figure it out from the data
+- A value of 5 for "age" in HR is suspicious, but valid in a pediatric dataset
+- A negative value for "temperature" is valid in weather data, but not for body temperature
+- An age of 150 is impossible anywhere; an age of 90 is valid in medical data
+- Always prefer "flag" over "drop" when unsure — let humans decide
 
-FORBIDDEN:
-- isin() checks on text columns
-- str.contains() on any column  
-- Checking if categorical values are "valid"
+RULES TO GENERATE:
+- Only for NUMERIC columns
+- Only for values that are clearly anomalous given the inferred context
+- 3 to 8 rules maximum
+- Skip a column if you can't confidently determine valid ranges from context
 
-Respond ONLY valid JSON:
+Respond ONLY with valid JSON:
 {{
+  "inferred_context": "What you think this dataset is about and why",
+  "confidence": "high|medium|low",
   "rules": [
     {{
-      "rule_id": "unique_id",
-      "description": "description",
-      "column": "column_name",
-      "condition": "pandas boolean expression",
-      "fix_action": "abs|drop|flag|null",
-      "fix_value": null
+      "rule_id": "short_unique_id",
+      "description": "Human-readable description",
+      "column": "exact_column_name",
+      "condition": "df['column_name'] < 0",
+      "fix_action": "flag",
+      "justification": "Why this is anomalous in the inferred context"
     }}
   ]
-}}
-Max 8 rules. Only for existing columns."""
-        result = self.llm.call(prompt, max_tokens=1200)
-        if not result:
-            return []
-        try:
-            rules = json.loads(result).get("rules", [])
-            _safe_stderr(f"   🤖 {len(rules)} règles générées par LLM")
-            return rules
-        except:
-            return []
+}}"""
 
-    def validate(self, df):
-        _safe_stderr(f"\n🔍 Validation métier...")
-        llm_rules = self.generate_llm_rules(df)
-        merged = {r["rule_id"]: r for r in llm_rules}
+        try:
+            result = self.llm.call(prompt, max_tokens=2000)
+            if not result:
+                return [], 'LLM returned nothing'
+
+            m = re.search(r'\{.*\}', result, re.DOTALL)
+            if not m:
+                return [], 'LLM response not parseable'
+
+            parsed = json.loads(m.group(0))
+            rules = parsed.get('rules', [])
+            context = parsed.get('inferred_context', '')
+            confidence = parsed.get('confidence', 'unknown')
+
+            # Filtrer les règles sur des colonnes inexistantes
+            rules = [r for r in rules if r.get('column', '') in df.columns]
+
+            self._log(f"Context inferred: {context}")
+            self._log(f"Confidence: {confidence}")
+            self._log(f"{len(rules)} rules generated by LLM")
+            return rules, context
+
+        except Exception as e:
+            self._log(f"WARNING: LLM rule generation failed: {e}")
+            return [], f'Error: {e}'
+
+    # ── Pipeline principal ─────────────────────────────────────────────────
+
+    def validate(self, df: pd.DataFrame, filename: str = '') -> tuple:
+        """
+        Pipeline de validation universel.
+        Retourne (df_avec_flags, rapport).
+        """
+        self._log(f"\nContext-aware validation (universal mode)...")
+        self._log(f"Input: {len(df)} rows, {len(df.columns)} columns, file='{filename}'")
+
+        # 1. Règles LLM (contextualisées automatiquement)
+        llm_rules, inferred_context = self.generate_llm_rules(df, filename)
+
+        # 2. Règles statistiques (universelles, IQR strict)
+        stat_rules = detect_statistical_outliers(df, iqr_multiplier=3.0)
+        self._log(f"{len(stat_rules)} statistical rules (IQR × 3.0)")
+
+        # 3. Merger : custom > LLM > stat (priorité décroissante)
+        all_rules = {}
+        for r in stat_rules:
+            all_rules[r['rule_id']] = r
+        for r in llm_rules:
+            all_rules[r['rule_id']] = r
         for r in self.custom_rules:
-            merged[r["rule_id"]] = r
-        all_rules = list(merged.values())
+            all_rules[r['rule_id']] = r
+
+        self._log(f"{len(all_rules)} total rules "
+                  f"({len(llm_rules)} LLM + {len(stat_rules)} stat + {len(self.custom_rules)} custom)")
+
         if not all_rules:
-            _safe_stderr("   ℹ️  Aucune règle applicable")
+            self._log("No rules applicable")
             return df, []
-        _safe_stderr(f"   📋 {len(all_rules)} règles ({len(llm_rules)} LLM + {len(self.custom_rules)} custom)")
+
+        # 4. Appliquer les règles
         rapport = []
-        for rule in all_rules:
-            df, v, f = self._apply(df, rule)
-            if v > 0:
-                rapport.append({"rule_id": rule.get("rule_id"),
-                                 "description": rule.get("description"),
-                                 "violations": v, "fixed": f})
+        flag_cols = {}
+
+        for rule in all_rules.values():
+            df, violations, fixed = self._apply(df, rule)
+            if violations > 0:
+                rapport.append({
+                    'rule_id':        rule.get('rule_id'),
+                    'description':    rule.get('description'),
+                    'column':         rule.get('column'),
+                    'violations':     violations,
+                    'fixed':          fixed,
+                    'action':         rule.get('fix_action', 'flag'),
+                    'source':         rule.get('source', 'llm'),
+                    'justification':  rule.get('justification', ''),
+                    'inferred_context': inferred_context if rule.get('source') != 'statistical' else '',
+                })
+                if rule.get('fix_action', 'flag') == 'flag':
+                    col = rule.get('column', '')
+                    flag_cols[col] = flag_cols.get(col, 0) + violations
+
+        # 5. Résumé lisible
+        if flag_cols:
+            self._log(f"\nSuspicious values flagged (FLAG_* columns added for human review):")
+            for col, count in sorted(flag_cols.items(), key=lambda x: -x[1]):
+                pct = count / len(df) * 100
+                self._log(f"  {col}: {count} rows flagged ({pct:.1f}%)")
+        else:
+            self._log("No suspicious values found")
+
         return df, rapport
 
-    def _apply(self, df, rule):
-        rid    = rule.get("rule_id", "?")
-        desc   = rule.get("description", "")
-        cond   = rule.get("condition", "")
-        action = rule.get("fix_action", "flag")
-        col    = rule.get("column", "")
-        val    = rule.get("fix_value")
+    # ── Appliquer une règle ───────────────────────────────────────────────
+
+    def _apply(self, df: pd.DataFrame, rule: dict) -> tuple:
+        rid    = rule.get('rule_id', '?')
+        cond   = rule.get('condition', '')
+        action = rule.get('fix_action', 'flag')
+        col    = rule.get('column', '')
+        val    = rule.get('fix_value')
         v = f = 0
+
         try:
-            mask = eval(cond, {"df": df, "pd": pd, "np": np})
+            mask = eval(cond, {'df': df, 'pd': pd, 'np': np})
             if not isinstance(mask, pd.Series):
                 return df, 0, 0
             v = int(mask.sum())
             if v == 0:
                 return df, 0, 0
-            _safe_stderr(f"   ⚠️  [{rid}] {desc}: {v} violations")
-            if action == "abs" and col in df.columns:
+
+            desc = rule.get('description', rid)
+            self._log(f"  [{action.upper()}] {desc}: {v} row(s)")
+
+            if action == 'abs' and col in df.columns:
                 df.loc[mask, col] = df.loc[mask, col].abs()
                 f = v
-            elif action == "drop":
+            elif action == 'drop':
                 df = df[~mask].copy()
                 f = v
-            elif action == "null" and col in df.columns:
+            elif action == 'null' and col in df.columns:
                 df.loc[mask, col] = np.nan
                 f = v
-            elif action == "set" and col in df.columns and val is not None:
+            elif action == 'set' and col in df.columns and val is not None:
                 df.loc[mask, col] = val
                 f = v
-            elif action == "flag":
-                flag_col = f"FLAG_{rid}"
-                df[flag_col] = False
+            elif action == 'flag':
+                flag_col = f'FLAG_{col}'
+                if flag_col not in df.columns:
+                    df[flag_col] = False
                 df.loc[mask, flag_col] = True
+                # flag = 0 fixes (humain décide)
         except Exception as e:
-            _safe_stderr(f"   ❌ Erreur règle [{rid}]: {e}")
+            self._log(f"  WARNING: Rule [{rid}] error: {e}")
+
         return df, v, f
 
+    def _log(self, msg: str):
+        import sys
+        try:
+            print(f"   {msg}", file=sys.stderr)
+        except UnicodeEncodeError:
+            print(msg.encode('ascii', errors='replace').decode('ascii'), file=sys.stderr)
+
+
 # ============================================================================
-# 3. DERIVED COLUMNS RECALCULATOR
+# TEST
+# ============================================================================
+
+
+
 # ============================================================================
 
 class DerivedColumnsRecalculator:
@@ -634,7 +857,7 @@ class CrossReferencePipeline:
             _safe_stderr(f"📚 Refs: {[os.path.basename(r) for r in ref_files]}")
         _safe_stderr(f"{'='*60}")
 
-        # Chargement avec normalisation des dates intégrée
+        # ── Étape 0 : Charger le fichier principal ──────────────────────────────
         df = load_csv(main_file, llm=self.llm)
         if df is None:
             return None
@@ -642,14 +865,15 @@ class CrossReferencePipeline:
         rapport = {
             "main_file": main_file, "ref_files": ref_files,
             "initial_rows": len(df), "initial_cols": len(df.columns),
-            "cross_reference": [], "validation": [],
-            "derived_columns": [], "enrichment": [],
+            "cross_reference": [], "dedup_after_merge": 0,
+            "validation": [], "derived_columns": [], "enrichment": [],
             "final_rows": 0, "final_cols": 0, "null_remaining": 0
         }
 
-        # 1. Cross Reference
+        # ── Étape 1 : MERGE des fichiers de référence ────────────────────────
+        # On fusionne AVANT de dédupliquer pour détecter les doublons inter-fichiers
         if ref_files:
-            _safe_stderr(f"\n{'─'*40}\n1️⃣  CROSS REFERENCE\n{'─'*40}")
+            _safe_stderr(f"\n{'─'*40}\n1  MERGE & CROSS REFERENCE\n{'─'*40}")
             for ref_file in ref_files:
                 df_ref = load_csv(ref_file, llm=self.llm)
                 if df_ref is None:
@@ -657,40 +881,56 @@ class CrossReferencePipeline:
                 df, ref_r = self.cross_ref_engine.enrich(df, df_ref, os.path.basename(ref_file))
                 rapport["cross_reference"].append(ref_r)
         else:
-            _safe_stderr(f"\n   ℹ️  Mode simple (pas de références)")
+            _safe_stderr(f"\n   Mode simple (pas de references)")
 
-        # 2. Validation
-        _safe_stderr(f"\n{'─'*40}\n2️⃣  VALIDATION MÉTIER\n{'─'*40}")
-        df, val_r = self.validator.validate(df)
+        # ── Étape 2 : DÉDUPLICATION sur le dataset fusionné ──────────────────
+        # Après le merge, des doublons inter-fichiers peuvent apparaître.
+        # On déduplique une seule fois ici sur l'ensemble complet.
+        _safe_stderr(f"\n{'─'*40}\n2  DEDUPLICATION POST-MERGE\n{'─'*40}")
+        rows_before = len(df)
+        df = df.drop_duplicates()
+        dups_removed = rows_before - len(df)
+        rapport["dedup_after_merge"] = dups_removed
+        if dups_removed > 0:
+            _safe_stderr(f"   {dups_removed} duplicates removed after merge")
+        else:
+            _safe_stderr(f"   No duplicates found")
+
+        # ── Étape 3 : VALIDATION CONTEXTUELLE ────────────────────────────────
+        # Le validator reçoit le dataset complet et fusionné
+        _safe_stderr(f"\n{'─'*40}\n3  CONTEXT-AWARE VALIDATION\n{'─'*40}")
+        df, val_r = self.validator.validate(df, filename=os.path.basename(main_file))
         rapport["validation"] = val_r
 
-        # 3. Recalcul colonnes dérivées
-        _safe_stderr(f"\n{'─'*40}\n3️⃣  RECALCUL COLONNES DÉRIVÉES\n{'─'*40}")
+        # ── Étape 4 : RECALCUL colonnes dérivées ─────────────────────────────
+        _safe_stderr(f"\n{'─'*40}\n4  RECALCUL COLONNES DERIVEES\n{'─'*40}")
         df, der_r = self.derived_recalc.recalculate(df)
         rapport["derived_columns"] = der_r
 
-        # 4. LLM Enricher
+        # ── Étape 5 : LLM ENRICHER ───────────────────────────────────────────
         if self.llm_enricher and self.llm.available:
-            _safe_stderr(f"\n{'─'*40}\n4️⃣  LLM ENRICHER\n{'─'*40}")
+            _safe_stderr(f"\n{'─'*40}\n5  LLM ENRICHER\n{'─'*40}")
             df, enr_r = self.llm_enricher.enrich(
                 df, ref_columns=self.cross_ref_engine.ref_columns
             )
             rapport["enrichment"] = enr_r
 
-        # 5. Imputation finale
-        _safe_stderr(f"\n{'─'*40}\n5️⃣  IMPUTATION FINALE\n{'─'*40}")
+        # ── Étape 6 : IMPUTATION FINALE ──────────────────────────────────────
+        _safe_stderr(f"\n{'─'*40}\n6  IMPUTATION FINALE\n{'─'*40}")
         df = self.imputer.impute(df)
 
-        # 6. Export
-        _safe_stderr(f"\n{'─'*40}\n6️⃣  EXPORT\n{'─'*40}")
+        # ── Étape 7 : EXPORT ─────────────────────────────────────────────────
+        _safe_stderr(f"\n{'─'*40}\n7  EXPORT\n{'─'*40}")
         rapport.update({"final_rows": len(df), "final_cols": len(df.columns),
                          "null_remaining": int(df.isna().sum().sum())})
         out_csv, out_json = export_results(df, main_file, output_dir, rapport)
 
         _safe_stderr(f"\n{'='*60}")
-        _safe_stderr(f"✅ PIPELINE TERMINÉ")
-        _safe_stderr(f"   Lignes  : {rapport['initial_rows']} → {rapport['final_rows']}")
-        _safe_stderr(f"   Colonnes: {rapport['initial_cols']} → {rapport['final_cols']}")
+        _safe_stderr(f"PIPELINE TERMINE")
+        _safe_stderr(f"   Lignes  : {rapport['initial_rows']} -> {rapport['final_rows']}")
+        if rapport.get('dedup_after_merge', 0) > 0:
+            _safe_stderr(f"   Doublons supprimes apres merge: {rapport['dedup_after_merge']}")
+        _safe_stderr(f"   Colonnes: {rapport['initial_cols']} -> {rapport['final_cols']}")
         _safe_stderr(f"   NULL restants: {rapport['null_remaining']}")
         _safe_stderr(f"{'='*60}")
 
