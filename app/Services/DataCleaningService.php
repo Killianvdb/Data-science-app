@@ -261,7 +261,7 @@ class DataCleaningService
         if (str_starts_with($laravelPath, '/shared_data')) {
             return $laravelPath;
         }
-        
+
         // Remplace tous les formats possibles par /shared_data
         return str_replace(
             [
@@ -280,22 +280,22 @@ class DataCleaningService
 {
     // Le workflow affiche du texte + JSON à la fin
     // On cherche juste le bloc JSON
-    
+
     // Méthode 1 : Cherche le dernier bloc JSON valide
     $lines = explode("\n", trim($stdout));
-    
+
     // Parcours depuis la fin pour trouver le JSON
     for ($i = count($lines) - 1; $i >= 0; $i--) {
         $line = trim($lines[$i]);
         if (empty($line)) continue;
-        
+
         // Essaye de parser comme JSON
         $decoded = json_decode($line, true);
         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
             return $decoded;
         }
     }
-    
+
     // Méthode 2 : Extrait le JSON avec regex
     if (preg_match('/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/s', $stdout, $matches)) {
         $result = json_decode($matches[0], true);
@@ -303,13 +303,13 @@ class DataCleaningService
             return $result;
         }
     }
-    
+
     // Méthode 3 : Fallback - crée un résultat manuel depuis le texte
     if (str_contains($stdout, '✅ TERMINATED') || str_contains($stdout, 'Succès')) {
         // Parse les infos du texte
         preg_match('/(\d+) lignes × (\d+) colonnes/', $stdout, $stats);
         preg_match('/Output\s+:\s+(.+)/', $stdout, $output);
-        
+
         return [
             'status' => 'success',
             'rows' => isset($stats[1]) ? (int)$stats[1] : 0,
@@ -318,7 +318,7 @@ class DataCleaningService
             'message' => 'Cleaning completed successfully'
         ];
     }
-    
+
     // Si rien ne marche, throw error
     throw new \Exception("Failed to parse workflow output. STDOUT: " . substr($stdout, 0, 1000));
 }

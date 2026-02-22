@@ -13,7 +13,7 @@
     <div class="max-w-4xl mx-auto p-6">
         {{-- Error box --}}
         @if(session('error'))
-            <div class="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+            <div class="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700 whitespace-pre-line">
                 <div class="font-semibold">Error</div>
                 <div class="text-sm mt-1">{{ session('error') }}</div>
             </div>

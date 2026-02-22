@@ -29,54 +29,45 @@ class VisualizationController extends Controller
             'chart_columns' => 'nullable|array',
         ]);
 
-        // unique report id
         $reportId = (string) Str::uuid();
 
-        // ===== 1) Save uploaded file to local/private storage (shared with python container) =====
+        // 1) Input -> shared volume (zichtbaar voor python container)
         $file = $request->file('dataset');
-        $ext = '.' . strtolower($file->getClientOriginalExtension());
+        $ext  = strtolower($file->getClientOriginalExtension());
 
-        $srcRelDir = "report_sources/$reportId";
-        Storage::disk('local')->makeDirectory($srcRelDir);
-
-        $srcRelPath = $file->storeAs($srcRelDir, "source$ext", 'local');
-        $inputPath = Storage::disk('local')->path($srcRelPath);
-
-        if (!file_exists($inputPath)) {
-            return back()->with('error', "Upload not found: " . $inputPath);
+        $sharedInDir = "/shared_data/in/{$reportId}";
+        if (!is_dir($sharedInDir)) {
+            mkdir($sharedInDir, 0777, true);
         }
 
-        // make readable for python container
-        @chmod($inputPath, 0666);
+        $sharedInput = "{$sharedInDir}/source.{$ext}";
+        $file->move($sharedInDir, "source.{$ext}");
+        @chmod($sharedInput, 0666);
 
-        // ===== 2) Public output folder for report images/json =====
-        $outRel = "reports/$reportId";
+        if (!file_exists($sharedInput)) {
+            return back()->with('error', "Upload not found in shared folder: {$sharedInput}");
+        }
+
+        // 2) Output -> shared volume
+        $sharedOutDir = "/shared_data/out/{$reportId}";
+        if (!is_dir($sharedOutDir)) {
+            mkdir($sharedOutDir, 0777, true);
+        }
+        @chmod($sharedOutDir, 0777);
+
+        // 3) Public output folder (Laravel toont images via storage:link)
+        $outRel = "reports/{$reportId}";
         Storage::disk('public')->makeDirectory($outRel);
-        $outDirFull = Storage::disk('public')->path($outRel);
+        $outPublicDir = Storage::disk('public')->path($outRel);
+        @chmod($outPublicDir, 0777);
 
-        // make writable for python container
-        @chmod($outDirFull, 0777);
-
-        // ===== 3) Options passed to python =====
-        $options = [
-            'charts' => $request->input('charts', ['missing_values', 'dtypes']),
-            'chart_columns' => $request->input('chart_columns', []),
-        ];
-
-        // ===== 4) Map Laravel paths -> python container paths =====
-        // Laravel local(private): storage/app/private/...  -> python: /app/python_shared_data/...
-        $pythonInput = str_replace(storage_path('app/private'), '/app/python_shared_data', $inputPath);
-
-        // Laravel public: storage/app/public/... -> python: /app/python_shared_data/public/...
-        $pythonOutput = str_replace(storage_path('app/public'), '/app/python_shared_data/public', $outDirFull);
-
-        // ===== 5) Execute python inside datasci-python container =====
+        // 4) Run python in datasci-python container
+        // BELANGRIJK: script staat bij jou op /app/visualize.py
         $command = [
-            'docker', 'exec', 'datasci-python',
-            'python', '/app/python_scripts/visualize.py',
-            $pythonInput,
-            $pythonOutput,
-            json_encode($options),
+            '/usr/bin/docker', 'exec', 'datasci-python',
+            'python', '/app/visualize.py',
+            $sharedInput,
+            $sharedOutDir,
         ];
 
         $process = new Process($command);
@@ -84,11 +75,93 @@ class VisualizationController extends Controller
         $process->run();
 
         if (!$process->isSuccessful()) {
+            $exit = $process->getExitCode();
+            $err  = trim($process->getErrorOutput());
+            $out  = trim($process->getOutput());
+
             return back()->with('error',
-                "Python processing failed:\n" .
-                $process->getErrorOutput() . "\n" .
-                $process->getOutput()
+                "Python processing failed (exit={$exit})\n" .
+                "CMD:\n" . implode(' ', array_map('escapeshellarg', $command)) . "\n\n" .
+                "STDERR:\n" . ($err !== '' ? $err : '[empty]') . "\n\n" .
+                "STDOUT:\n" . ($out !== '' ? $out : '[empty]')
             );
+        }
+
+        // 5) Copy results (png + summary.json) -> storage/app/public/reports/{id}
+        foreach (glob($sharedOutDir . '/*') as $p) {
+            @copy($p, $outPublicDir . '/' . basename($p));
+        }
+
+        return redirect()->route('visualise.show', ['id' => $reportId]);
+    }
+
+    public function fromCleaned(Request $request)
+    {
+        // Signed URL check
+        if (!$request->hasValidSignature()) {
+            abort(403, 'Invalid or expired visualisation link.');
+        }
+
+        $relPath = (string) $request->query('path', '');
+
+        // Basic safety: alleen toestaan uit bepaalde folders
+        if (!Str::startsWith($relPath, ['cleaned_output/', 'enriched_output/'])) {
+            abort(403, 'Path not allowed.');
+        }
+
+        $inputPath = storage_path('app/' . $relPath);
+        if (!file_exists($inputPath)) {
+            abort(404, "Input file not found: $relPath");
+        }
+
+        $ext = strtolower(pathinfo($inputPath, PATHINFO_EXTENSION));
+        $reportId = (string) Str::uuid();
+
+        // 1) Copy input -> shared volume (voor python container)
+        $sharedInDir = "/shared_data/in/{$reportId}";
+        if (!is_dir($sharedInDir)) mkdir($sharedInDir, 0777, true);
+
+        $sharedInput = "{$sharedInDir}/source.{$ext}";
+        copy($inputPath, $sharedInput);
+        @chmod($sharedInput, 0666);
+
+        // 2) Shared output
+        $sharedOutDir = "/shared_data/out/{$reportId}";
+        if (!is_dir($sharedOutDir)) mkdir($sharedOutDir, 0777, true);
+        @chmod($sharedOutDir, 0777);
+
+        // 3) Public output folder
+        $outRel = "reports/{$reportId}";
+        Storage::disk('public')->makeDirectory($outRel);
+        $outPublicDir = Storage::disk('public')->path($outRel);
+        @chmod($outPublicDir, 0777);
+
+        // 4) Run python
+        $process = new Process([
+            'docker', 'exec', 'datasci-python',
+            'python', '/app/visualize.py',
+            $sharedInput,
+            $sharedOutDir,
+        ]);
+
+        $process->setTimeout(180);
+        $process->run();
+
+        if (!$process->isSuccessful()) {
+            $exit = $process->getExitCode();
+            $err  = trim($process->getErrorOutput());
+            $out  = trim($process->getOutput());
+
+            return back()->with('error',
+                "Python processing failed (exit={$exit})\n".
+                "STDERR:\n".($err !== '' ? $err : '[empty]')."\n\n".
+                "STDOUT:\n".($out !== '' ? $out : '[empty]')
+            );
+        }
+
+        // 5) Copy results -> public
+        foreach (glob($sharedOutDir . '/*') as $p) {
+            @copy($p, $outPublicDir . '/' . basename($p));
         }
 
         return redirect()->route('visualise.show', ['id' => $reportId]);

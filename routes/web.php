@@ -38,6 +38,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
     Route::post('/visualise/generate', [VisualizationController::class, 'generate'])->name('visualise.generate');
     Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show');
+    Route::post('/visualise/{id}', [VisualizationController::class, 'update'])->name('visualise.update');
+    // Visualise existing cleaned/enriched file (signed URL)
+    Route::get('/visualise/from-cleaned', [VisualizationController::class, 'fromCleaned'])->name('visualise.fromCleaned')->middleware('signed');
 
     // Profile Management
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

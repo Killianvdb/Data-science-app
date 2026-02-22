@@ -1,184 +1,213 @@
 <x-app-layout :title="'Visualisation Report'">
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            Visualisation
-        </h2>
+        <div class="space-y-1">
+            <h2 class="font-semibold text-2xl text-gray-900 leading-tight">
+                Visualisation Report
+            </h2>
+            <p class="text-sm text-gray-500">Choose charts, columns and regenerate your report.</p>
+        </div>
     </x-slot>
 
     @php
-        $chartMeta = [
-            'missing_values' => ['label' => 'Missing values', 'needs' => null],
-            'dtypes'         => ['label' => 'Column types', 'needs' => null],
-            'histogram'      => ['label' => 'Histogram', 'needs' => 'numeric'],
-            'pie'            => ['label' => 'Pie chart', 'needs' => 'categorical'],
-            'line'           => ['label' => 'Line chart', 'needs' => 'numeric'],
+        $charts = $summary['charts'] ?? [];
+        $recommended = $summary['recommendations'] ?? [];
+        $autoSelected = $summary['auto_selected'] ?? [];
+        $selected = $summary['selected_charts'] ?? array_keys($charts);
+
+        $numericCols = $summary['numeric_columns'] ?? [];
+        $catCols = $summary['categorical_columns'] ?? [];
+
+        $chartColumns = $summary['chart_columns'] ?? [];
+
+        $labels = [
+            'missing_values' => 'Missing values (bar)',
+            'histogram'      => 'Histogram',
+            'line'           => 'Line chart',
+            'category_bar'   => 'Category bar chart',
         ];
 
-        $columnNames = $summary['column_names'] ?? [];
-        $numericCols = $summary['numeric_columns'] ?? [];
-        $catCols     = $summary['categorical_columns'] ?? [];
-
-        $currentCharts = array_keys($summary['charts'] ?? []);
-        if (empty($currentCharts)) {
-            $currentCharts = ['missing_values', 'dtypes'];
-        }
-
-        $currentChartCols = $summary['chart_columns'] ?? [];
+        // Voor display: volg de selected_charts volgorde
+        $displayCharts = is_array($selected) ? $selected : array_keys($charts);
     @endphp
-
-    {{-- Loading overlay --}}
-    <div id="vizLoader" class="hidden fixed inset-0 bg-black/50 z-50 items-center justify-center">
-        <div class="bg-white rounded-lg p-6 shadow-lg flex items-center gap-4">
-            <div class="w-6 h-6 border-4 border-gray-300 border-t-gray-800 rounded-full animate-spin"></div>
-            <div>
-                <div class="font-semibold">Generating charts...</div>
-                <div class="text-sm text-gray-600">Running Python scripts, please wait.</div>
-            </div>
-        </div>
-    </div>
 
     <div class="max-w-5xl mx-auto p-6 space-y-6">
 
+        {{-- Error --}}
         @if(session('error'))
-            <div class="p-3 rounded bg-red-100 text-red-800">
-                {!! nl2br(e(session('error'))) !!}
+            <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700 whitespace-pre-line">
+                <div class="font-semibold">Error</div>
+                <div class="text-sm mt-1">{{ session('error') }}</div>
             </div>
         @endif
 
-        <div class="bg-white rounded-xl shadow p-6 space-y-3">
-            <h1 class="text-xl font-semibold">Visualization Report</h1>
-
-            <p>Rows: <b>{{ $summary['rows'] ?? '-' }}</b></p>
-            <p>Columns: <b>{{ $summary['columns'] ?? '-' }}</b></p>
-            <p>Missing total: <b>{{ $summary['missing_total'] ?? '-' }}</b></p>
-            <p>Duplicate rows: <b>{{ $summary['duplicate_rows'] ?? '-' }}</b></p>
+        {{-- Summary --}}
+        <div class="bg-white rounded-2xl shadow ring-1 ring-black/5 p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-3">Dataset summary</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-700">
+                <div>Rows: <span class="font-semibold">{{ $summary['rows'] ?? 0 }}</span></div>
+                <div>Columns: <span class="font-semibold">{{ $summary['columns'] ?? 0 }}</span></div>
+                <div>Missing total: <span class="font-semibold">{{ $summary['missing_total'] ?? 0 }}</span></div>
+                <div>Duplicate rows: <span class="font-semibold">{{ $summary['duplicate_rows'] ?? 0 }}</span></div>
+            </div>
         </div>
 
-        {{-- SELECT + APPLY --}}
-        <form data-show-loader action="{{ route('visualise.update', ['id' => $id]) }}" method="POST" class="bg-white rounded-xl shadow p-6 space-y-4">
-            @csrf
+        {{-- Recommendations + Selection Panel --}}
+        <div class="bg-white rounded-2xl shadow ring-1 ring-black/5 p-6 space-y-4">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900">Recommendations</h3>
+                    <p class="text-sm text-gray-500">Select one or more charts and choose columns where needed.</p>
+                </div>
+                <a href="{{ route('visualise.index') }}" class="text-sm text-blue-600 hover:underline">
+                    Upload new file
+                </a>
+            </div>
 
-            <h2 class="text-lg font-semibold">Select charts</h2>
+            <form method="POST" action="{{ route('visualise.update', ['id' => $id]) }}" class="space-y-5" id="chartForm">
+                @csrf
 
-            <details class="border rounded-lg p-3">
-                <summary class="cursor-pointer select-none font-medium">
-                    Choose charts ({{ count($currentCharts) }} selected)
-                </summary>
+                {{-- Recommended checkboxes --}}
+                <div class="grid md:grid-cols-2 gap-3">
+                    @foreach($recommended as $rec)
+                        @php
+                            $key = $rec['key'] ?? '';
+                            $isChecked = in_array($key, $selected ?? []);
+                            $reason = $rec['reason'] ?? '';
+                        @endphp
 
-                <div class="mt-3 space-y-2">
-                    @foreach($chartMeta as $key => $meta)
-                        <label class="flex items-center gap-2">
+                        <label class="flex gap-3 rounded-xl border p-4 hover:bg-gray-50">
                             <input
                                 type="checkbox"
+                                class="mt-1"
                                 name="charts[]"
                                 value="{{ $key }}"
-                                @checked(in_array($key, $currentCharts))
+                                {{ $isChecked ? 'checked' : '' }}
+                                onchange="toggleOptions('{{ $key }}')"
                             >
-                            <span>{{ $meta['label'] }}</span>
+                            <div class="flex-1">
+                                <div class="font-semibold text-gray-900">{{ $labels[$key] ?? $key }}</div>
+                                <div class="text-sm text-gray-600">{{ $reason }}</div>
+
+                                {{-- Column dropdowns --}}
+                                <div class="mt-3 space-y-3" id="opts-{{ $key }}">
+                                    @if($key === 'histogram' || $key === 'line')
+                                        <div>
+                                            <label class="block text-xs font-semibold text-gray-600 mb-1">
+                                                Select numeric column
+                                            </label>
+                                            <select
+                                                name="chart_columns[{{ $key }}]"
+                                                class="w-full rounded-lg border px-3 py-2 text-sm"
+                                                {{ empty($numericCols) ? 'disabled' : '' }}
+                                            >
+                                                @foreach($numericCols as $c)
+                                                    <option value="{{ $c }}" {{ (($chartColumns[$key] ?? '') === $c) ? 'selected' : '' }}>
+                                                        {{ $c }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            @if(empty($numericCols))
+                                                <p class="text-xs text-gray-500 mt-1">No numeric columns found.</p>
+                                            @endif
+                                        </div>
+                                    @endif
+
+                                    @if($key === 'category_bar')
+                                        <div>
+                                            <label class="block text-xs font-semibold text-gray-600 mb-1">
+                                                Select categorical column
+                                            </label>
+                                            <select
+                                                name="chart_columns[{{ $key }}]"
+                                                class="w-full rounded-lg border px-3 py-2 text-sm"
+                                                {{ empty($catCols) ? 'disabled' : '' }}
+                                            >
+                                                @foreach($catCols as $c)
+                                                    <option value="{{ $c }}" {{ (($chartColumns[$key] ?? '') === $c) ? 'selected' : '' }}>
+                                                        {{ $c }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            @if(empty($catCols))
+                                                <p class="text-xs text-gray-500 mt-1">No categorical columns found.</p>
+                                            @endif
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
                         </label>
                     @endforeach
                 </div>
-            </details>
 
-            <div class="text-sm text-gray-600">
-                Tip: voor <b>Histogram</b> en <b>Line chart</b kies je een <b>numerieke</b> kolom. Voor <b>Pie chart</b kies je een <b>categorische</b> kolom.
-            </div>
+                <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                    <button
+                        type="submit"
+                        class="inline-flex items-center justify-center rounded-xl bg-blue-600 px-6 py-3 text-white font-semibold shadow hover:bg-blue-700"
+                    >
+                        Apply & regenerate
+                    </button>
 
-            <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">
-                Apply (regenerate)
-            </button>
-        </form>
+                    <div class="text-xs text-gray-500">
+                        Tip: Leave everything blank and click Apply → then Python will use auto-select.
+                    </div>
+                </div>
+            </form>
+        </div>
 
-        {{-- CHARTS --}}
+        {{-- Charts display --}}
         <div class="space-y-6">
-            @foreach(($summary['charts'] ?? []) as $chartKey => $filename)
-                @php
-                    $meta = $chartMeta[$chartKey] ?? ['label' => $chartKey, 'needs' => null];
+            <h3 class="text-lg font-semibold text-gray-900">Charts</h3>
 
-                    $allowedCols = [];
-                    if ($meta['needs'] === 'numeric') $allowedCols = $numericCols;
-                    if ($meta['needs'] === 'categorical') $allowedCols = $catCols;
+            @php
+                $base = asset('storage/reports/' . $id);
+            @endphp
 
-                    $selectedCol = $currentChartCols[$chartKey] ?? null;
+            @forelse($displayCharts as $key)
+                @if(!empty($charts[$key] ?? null))
+                    <div class="bg-white rounded-2xl shadow ring-1 ring-black/5 p-6 space-y-4">
+                        <div class="flex items-center justify-between gap-4">
+                            <div>
+                                <div class="font-semibold text-gray-900">{{ $labels[$key] ?? $key }}</div>
+                                @if(!empty($chartColumns[$key] ?? null))
+                                    <div class="text-sm text-gray-500">Column: {{ $chartColumns[$key] }}</div>
+                                @endif
+                            </div>
 
-                    $imgUrl = asset('storage/reports/' . $id . '/' . $filename);
-                @endphp
-
-                <form data-show-loader action="{{ route('visualise.update', ['id' => $id]) }}" method="POST" class="bg-white rounded-xl shadow overflow-hidden">
-                    @csrf
-
-                    {{-- keep current selected charts when updating 1 chart --}}
-                    @foreach($currentCharts as $keepChart)
-                        <input type="hidden" name="charts[]" value="{{ $keepChart }}">
-                    @endforeach
-
-                    {{-- keep current chart column selections --}}
-                    @foreach(($currentChartCols ?? []) as $k => $v)
-                        @if($k !== $chartKey)
-                            <input type="hidden" name="chart_columns[{{ $k }}]" value="{{ $v }}">
-                        @endif
-                    @endforeach
-
-                    {{-- TOP BAR (per chart) --}}
-                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-gray-50 px-4 py-3 border-b">
-                        <div class="font-semibold">{{ $meta['label'] }}</div>
-
-                        <div class="flex items-center gap-2">
-                            @if($meta['needs'] !== null)
-                                <select name="chart_columns[{{ $chartKey }}]" class="border rounded px-3 py-2">
-                                    <option value="">Auto (first valid)</option>
-                                    @foreach($allowedCols as $col)
-                                        <option value="{{ $col }}" @selected($selectedCol === $col)>{{ $col }}</option>
-                                    @endforeach
-                                </select>
-                            @endif
-
-                            <button type="submit" class="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">
-                                Update
-                            </button>
-
-                            <a href="{{ $imgUrl }}" download class="px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700">
+                            <a
+                                href="{{ $base . '/' . $charts[$key] }}"
+                                download
+                                class="text-sm rounded-lg border px-3 py-2 hover:bg-gray-50"
+                            >
                                 Download
                             </a>
                         </div>
+
+                        <div class="border rounded-xl bg-gray-50 p-3">
+                            <img
+                                class="max-w-full h-auto mx-auto rounded-lg"
+                                src="{{ $base . '/' . $charts[$key] }}?v={{ time() }}"
+                                alt="Chart {{ $key }}"
+                            >
+                        </div>
                     </div>
-
-                    {{-- IMAGE --}}
-                    <div class="p-4">
-                        <img class="max-w-full h-auto" src="{{ $imgUrl }}?v={{ time() }}" alt="{{ $meta['label'] }}">
-                    </div>
-                </form>
-            @endforeach
-        </div>
-
-        <hr class="my-6">
-
-        {{-- Upload new file --}}
-        <div class="bg-white rounded-xl shadow p-6 space-y-3">
-            <h2 class="text-lg font-semibold">Upload another file</h2>
-
-            <form data-show-loader action="{{ route('visualise.generate') }}" method="POST" enctype="multipart/form-data" class="space-y-3">
-                @csrf
-
-                <input type="file" name="dataset" required class="border rounded p-2 w-full">
-
-                <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">
-                    Generate Report
-                </button>
-            </form>
+                @endif
+            @empty
+                <div class="text-red-600">No charts to display.</div>
+            @endforelse
         </div>
     </div>
 
     <script>
-        (function () {
-            const loader = document.getElementById('vizLoader');
+        function toggleOptions(key) {
+            const box = document.querySelector(`input[name="charts[]"][value="${key}"]`);
+            const opts = document.getElementById(`opts-${key}`);
+            if (!opts) return;
 
-            document.querySelectorAll('form[data-show-loader]').forEach((form) => {
-                form.addEventListener('submit', () => {
-                    loader.classList.remove('hidden');
-                    loader.classList.add('flex');
-                });
-            });
-        })();
+            // Show/hide dropdown area depending on checkbox
+            opts.style.display = box && box.checked ? "block" : "none";
+        }
+
+        // Init on load
+        ["missing_values","histogram","line","category_bar"].forEach(k => toggleOptions(k));
     </script>
 </x-app-layout>

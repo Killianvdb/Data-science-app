@@ -313,12 +313,30 @@
                     }
                 }
 
+                let visualiseHtml = '';
+                if (result.visualise_url) {
+                    visualiseHtml += `
+                        <a href="${result.visualise_url}"
+                        class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition mr-2 mb-2">
+                        📊 Visualise Cleaned File
+                        </a>`;
+                }
+
+                if (result.visualise_enriched_url) {
+                    visualiseHtml += `
+                        <a href="${result.visualise_enriched_url}"
+                        class="inline-block bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition mr-2 mb-2">
+                        📈 Visualise Enriched File
+                        </a>`;
+                }
+
                 resultDiv.innerHTML = `
                     <div class="bg-green-50 border border-green-200 rounded-lg p-6">
                         <h3 class="text-lg font-semibold text-green-800 mb-2">✅ Processing Completed!</h3>
                         <p class="text-green-700 mb-4">${result.message}</p>
                         <div class="flex flex-wrap gap-2 mb-4">
                             ${downloadsHtml}
+                            ${visualiseHtml}
                         </div>
                         <a href="{{ route('datasets.files') }}" class="inline-block text-sm text-gray-600 hover:text-gray-900 underline">View all my datasets →</a>
                     </div>

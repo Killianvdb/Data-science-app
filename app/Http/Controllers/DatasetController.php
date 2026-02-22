@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\URL;
 
 class DatasetController extends Controller
 {
@@ -65,7 +66,7 @@ class DatasetController extends Controller
             if ($file->getSize() > $maxTotalBytes) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => $isPro 
+                    'message' => $isPro
                         ? 'This file exceeds the current Pro max size (20MB). Contact support if you need a higher limit.'
                         : 'File exceeds maximum size for your plan.'
                 ], 403);
@@ -74,7 +75,7 @@ class DatasetController extends Controller
             if (!$user->canUpload(1)) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => $isPro 
+                    'message' => $isPro
                         ? 'You reached our fair-use security limit. Please contact support to increase it.'
                         : 'Monthly limit reached. Please upgrade your plan.'
                 ], 403);
@@ -83,7 +84,7 @@ class DatasetController extends Controller
             // Store main file in shared_data for Docker access
             $userId = Auth::id();
             $uploadDir = '/shared_data/uploads/' . $userId;
-            
+
             if (!is_dir($uploadDir)) {
                 mkdir($uploadDir, 0777, true);
             }
@@ -141,6 +142,39 @@ class DatasetController extends Controller
                     'filename' => basename($result['cleaned_file_path'])
                 ]);
             }
+
+            // Visualise link (signed URL)
+            $visualiseUrl = null;
+            $visualiseEnrichedUrl = null;
+
+            $toRel = fn(string $absPath) => ltrim(str_replace('/shared_data/', '', $absPath), '/');
+
+            // CLEANED
+            $cleanedName = basename($result['cleaned_file_path'] ?? '');
+            if ($cleanedName) {
+                $abs = $this->findSharedFile($userId, $cleanedName);
+                if ($abs) {
+                    $visualiseUrl = URL::temporarySignedRoute(
+                        'visualise.fromCleaned',
+                        now()->addMinutes(15),
+                        ['path' => $toRel($abs)]
+                    );
+                }
+            }
+
+            // ENRICHED
+            $enrichedName = basename($result['enriched_file'] ?? '');
+            if ($enrichedName) {
+                $abs = $this->findSharedFile($userId, $enrichedName);
+                if ($abs) {
+                    $visualiseEnrichedUrl = URL::temporarySignedRoute(
+                        'visualise.fromCleaned',
+                        now()->addMinutes(15),
+                        ['path' => $toRel($abs)]
+                    );
+                }
+            }
+
             if (!empty($result['enriched_file'])) {
                 $downloadUrls['enriched'] = route('datasets.download', [
                     'filename' => basename($result['enriched_file'])
@@ -157,6 +191,8 @@ class DatasetController extends Controller
                 'message' => 'File processed successfully!',
                 'data' => $result,
                 'download_urls' => $downloadUrls,
+                'visualise_url' => $visualiseUrl,
+                'visualise_enriched_url' => $visualiseEnrichedUrl,
                 'pipeline_mode' => $pipelineMode
             ]);
 
@@ -179,7 +215,7 @@ class DatasetController extends Controller
     public function download(Request $request, $filename)
     {
         $userId = Auth::id() ?? 'shared';
-        
+
         // Check in multiple possible locations
         $possiblePaths = [
             '/shared_data/cleaned/' . $userId . '/' . $filename,    // ← FIX
@@ -239,7 +275,7 @@ class DatasetController extends Controller
             if (count($files) > $plan->max_files_per_transaction) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => $isPro 
+                    'message' => $isPro
                         ? 'You reached the Pro batch limit (10 files per upload). Contact support for enterprise limits.'
                         : 'Too many files for your current plan.'
                 ], 403);
@@ -248,7 +284,7 @@ class DatasetController extends Controller
             if (!$user->canUpload(count($files))) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => $isPro 
+                    'message' => $isPro
                         ? 'You reached our fair-use security limit. Please contact support to increase it.'
                         : 'Monthly limit reached. Please upgrade your plan.'
                 ], 403);
@@ -270,7 +306,7 @@ class DatasetController extends Controller
             // Store files in shared_data
             $userId = Auth::id();
             $uploadDir = '/shared_data/uploads/' . $userId;
-            
+
             if (!is_dir($uploadDir)) {
                 mkdir($uploadDir, 0777, true);
             }
@@ -376,5 +412,19 @@ class DatasetController extends Controller
             return 'report';
         }
         return 'unknown';
+    }
+
+    private function findSharedFile(int $userId, string $filename): ?string
+    {
+        $candidates = [
+            "/shared_data/cleaned/{$userId}/{$filename}",
+            "/shared_data/results/{$userId}/{$filename}",
+        ];
+
+        foreach ($candidates as $p) {
+            if (file_exists($p)) return $p;
+        }
+
+        return null;
     }
 }
