@@ -133,12 +133,18 @@
     .btn-ghost:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
     .btn-ghost:disabled { opacity: 0.35; cursor: not-allowed; }
 
-    /* ── Main chat ── */
-    .chat-main { display: flex; flex-direction: column; background: var(--bg); }
+    .chat-main {
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+        min-height: 0;  /* critical for nested flex scroll */
+        overflow: hidden;
+    }
 
     .chat-header {
         padding: 14px 22px; border-bottom: 1px solid var(--border);
         display: flex; align-items: center; gap: 12px; background: var(--surface);
+        flex-shrink: 0; /* never compress */
     }
     .chat-header-icon {
         width: 34px; height: 34px; border-radius: 9px;
@@ -234,8 +240,13 @@
         40%            { transform: translateY(-5px); opacity: 1; }
     }
 
-    /* ── Input bar ── */
-    .input-bar { padding: 14px 22px; border-top: 1px solid var(--border); background: var(--surface); }
+    /* ── Input bar — always pinned to bottom ── */
+    .input-bar {
+        padding: 14px 22px;
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+        flex-shrink: 0; /* never compress or disappear */
+    }
     .input-wrapper {
         display: flex; align-items: flex-end; gap: 10px;
         background: var(--surface2); border: 1px solid var(--border);

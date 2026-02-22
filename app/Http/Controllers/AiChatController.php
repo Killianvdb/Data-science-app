@@ -9,18 +9,19 @@ use League\Csv\Reader;
 
 class AiChatController extends Controller
 {
-    private string $geminiApiKey;
-    private string $apiBase = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+    private string $mistralApiKey;
+    private string $model   = 'mistral-large-latest';
+    private string $apiBase = 'https://api.mistral.ai/v1/chat/completions';
 
     public function __construct()
     {
-        $key = config('services.gemini.api_key') ?? env('GEMINI_API_KEY');
+        $key = config('services.mistral.api_key') ?? env('MISTRAL_API_KEY');
 
         if (!$key) {
-            throw new \RuntimeException('GEMINI_API_KEY is not set. Add it to your .env file.');
+            throw new \RuntimeException('MISTRAL_API_KEY is not set. Add it to your .env file.');
         }
 
-        $this->geminiApiKey = $key;
+        $this->mistralApiKey = $key;
     }
 
     /**
@@ -55,8 +56,8 @@ class AiChatController extends Controller
         // 2. Retrieve conversation history from session
         $history = Session::get('chat_history', []);
 
-        // 3. Call Gemini API
-        $response = $this->callGemini($csvContext, $history, $userMessage);
+        // 3. Call Mistral API
+        $response = $this->callMistral($csvContext, $history, $userMessage);
 
         if (!$response['success']) {
             return response()->json([
@@ -68,8 +69,8 @@ class AiChatController extends Controller
         $aiReply = $response['content'];
 
         // 4. Persist conversation history (keep last 20 turns)
-        $history[] = ['role' => 'user',  'content' => $userMessage];
-        $history[] = ['role' => 'model', 'content' => $aiReply];
+        $history[] = ['role' => 'user',      'content' => $userMessage];
+        $history[] = ['role' => 'assistant', 'content' => $aiReply];
         if (count($history) > 20) {
             $history = array_slice($history, -20);
         }
@@ -252,13 +253,13 @@ class AiChatController extends Controller
     }
 
     /**
-     * Call the Gemini 2.0 Flash API.
-     * Gemini uses a different format: system instruction + contents array with history.
+     * Call the Mistral API.
+     * Mistral uses OpenAI-compatible format: system + user/assistant messages.
      */
-    private function callGemini(string $csvContext, array $history, string $userMessage): array
+    private function callMistral(string $csvContext, array $history, string $userMessage): array
     {
         try {
-            $systemInstruction = <<<PROMPT
+            $systemPrompt = <<<PROMPT
 You are an expert data analyst assistant. The user has uploaded one or more CSV files.
 
 {$csvContext}
@@ -276,53 +277,41 @@ Instructions:
 - Never make up data that is not in the context.
 PROMPT;
 
-            // Build contents array from history + current message
-            // Gemini uses 'user' and 'model' roles
-            $contents = [];
+            // Build messages — Mistral uses same format as OpenAI
+            $messages = [
+                ['role' => 'system', 'content' => $systemPrompt],
+            ];
 
             foreach ($history as $turn) {
-                $role = $turn['role'] === 'user' ? 'user' : 'model';
-                $contents[] = [
-                    'role'  => $role,
-                    'parts' => [['text' => $turn['content']]],
+                $messages[] = [
+                    'role'    => $turn['role'], // 'user' or 'assistant'
+                    'content' => $turn['content'],
                 ];
             }
 
-            // Add current user message
-            $contents[] = [
-                'role'  => 'user',
-                'parts' => [['text' => $userMessage]],
-            ];
-
-            $payload = [
-                'system_instruction' => [
-                    'parts' => [['text' => $systemInstruction]],
-                ],
-                'contents'           => $contents,
-                'generationConfig'   => [
-                    'temperature'     => 0.3,
-                    'maxOutputTokens' => 1024,
-                ],
-            ];
+            $messages[] = ['role' => 'user', 'content' => $userMessage];
 
             /** @var \Illuminate\Http\Client\Response $response */
             $response = Http::withHeaders([
-                'Content-Type' => 'application/json',
-            ])->timeout(30)->post(
-                $this->apiBase . '?key=' . $this->geminiApiKey,
-                $payload
-            );
+                'Authorization' => "Bearer {$this->mistralApiKey}",
+                'Content-Type'  => 'application/json',
+            ])->timeout(30)->post($this->apiBase, [
+                'model'       => $this->model,
+                'messages'    => $messages,
+                'temperature' => 0.3,
+                'max_tokens'  => 1024,
+            ]);
 
             if ($response->failed()) {
                 return [
                     'success' => false,
-                    'error'   => 'Gemini API error: ' . $response->status() . ' — ' . $response->body(),
+                    'error'   => 'Mistral API error: ' . $response->status() . ' — ' . $response->body(),
                 ];
             }
 
             /** @var array<string, mixed> $data */
             $data    = $response->json();
-            $content = $data['candidates'][0]['content']['parts'][0]['text'] ?? 'No response from AI.';
+            $content = $data['choices'][0]['message']['content'] ?? 'No response from AI.';
 
             return ['success' => true, 'content' => $content];
 
