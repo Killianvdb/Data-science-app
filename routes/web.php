@@ -47,8 +47,9 @@ Route::prefix('ai-chat')->name('ai-chat.')->group(function () {
 Route::middleware('auth')->group(function () {
 
 
-    Route::get('/csv/import', [CsvImportController::class, 'form'])->name('csv.form');
-    Route::post('/csv/import', [CsvImportController::class, 'import'])->name('csv.import');
+    Route::get('/import', [CsvImportController::class, 'form'])->name('csv.form');
+    Route::post('/import', [CsvImportController::class, 'import'])->name('csv.import');
+    Route::get('/dashboard', [CsvImportController::class, 'dashboard'])->name('csv.dashboard');
 
     // Visualization Routes
     Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
