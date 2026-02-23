@@ -48,7 +48,7 @@ services:
       - ./storage/app/shared_data:/shared_data
       - /var/run/docker.sock:/var/run/docker.sock
     env_file:
-    - .env.docker
+    - .env
     networks:
       - datasci_net
     depends_on:
@@ -113,7 +113,7 @@ services:
         - ./:/app
         - ./storage/app/shared_data:/shared_data
       env_file:
-      - .env.docker
+      - .env
       networks:
         - datasci_net
       depends_on:
