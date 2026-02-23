@@ -1,8 +1,5 @@
 <style>
-  /* --- PDF MODE --- */
   body.pdf-export #reportContent{
-    /* A4 landscape width: 297mm
-       margin izquierda+derecha: 10mm + 10mm => ancho útil = 277mm */
     width: 277mm !important;
     max-width: 277mm !important;
 
@@ -11,20 +8,18 @@
     box-sizing: border-box;
   }
 
-  /* Quita paddings de Tailwind dentro del report en modo PDF */
   body.pdf-export #reportContent.sm\:px-6,
   body.pdf-export #reportContent.lg\:px-8{
     padding-left: 0 !important;
     padding-right: 0 !important;
   }
 
-  /* Chart container: no recortes en PDF */
   body.pdf-export #reportContent .chart-box{
     width: 100% !important;
     max-width: 100% !important;
     overflow: visible !important;
     box-sizing: border-box;
-    padding: 0 6mm !important; /* aire para ejes */
+    padding: 0 6mm !important;
   }
 
   .chart-canvas{ width:100% !important; height:100% !important; display:block; }
@@ -213,11 +208,10 @@
 
             document.body.classList.add("pdf-export");
 
-            // Espera a que el CSS de pdf-export se aplique antes de capturar
             await new Promise(r => requestAnimationFrame(r));
 
             const opt = {
-                margin: [10, 10, 10, 10], // mm: top, left, bottom, right (html2pdf usa array como [top,left,bottom,right])
+                margin: [10, 10, 10, 10],
                 filename: fileName + "-insights.pdf",
                 image: { type: "jpeg", quality: 0.98 },
                 html2canvas: {

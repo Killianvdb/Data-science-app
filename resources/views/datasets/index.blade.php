@@ -111,7 +111,7 @@
                         </div>
                     </div>
 
-                    <div class="flex items-center justify-between pt-4">
+                    <div class="flex items-center flex-col pt-4 gap-3">
                         <button type="submit" id="submitBtn" class="inline-flex items-center px-6 py-3 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 transition duration-150">
                             🚀 Start Processing
                         </button>

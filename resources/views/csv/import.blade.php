@@ -72,7 +72,7 @@
                         </p>
                     </div>
 
-                    <div class="flex items-center gap-3">
+                    <div class="flex flex-col items-center gap-3 text-center">
                         <button type="submit" class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded">
                             Upload and visualize
                         </button>
