@@ -306,7 +306,7 @@ class CsvImportController extends Controller
     public function import(Request $request)
     {
         $request->validate([
-            'file' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:102400'],
         ]);
 
         [$headers, $rows] = $this->parseCsvAssoc($request->file('file')->getRealPath(), 3000);
