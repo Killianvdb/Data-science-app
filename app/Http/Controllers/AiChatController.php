@@ -88,7 +88,7 @@ class AiChatController extends Controller
     public function uploadCsv(Request $request)
     {
         $request->validate([
-            'csv_file' => 'required|file|mimes:csv,txt|max:10240',
+            'csv_file' => 'required|file|mimes:csv,txt|max:20480',
         ]);
 
         $file         = $request->file('csv_file');
