@@ -260,7 +260,7 @@ private function parseTxtLikeCsv(string $tmpPath, int $maxRows = 3000): array
         }
 
         $finalHeaders = [];
-        
+
         foreach ($headers as $colKey => $h) {
             if ($h !== '') $finalHeaders[] = $h;
         }
@@ -556,11 +556,27 @@ private function parseTxtLikeCsv(string $tmpPath, int $maxRows = 3000): array
         if (count($headers) === 0 || count($rows) === 0) {
             return back()->with('error', 'Could not read the file or it is empty / in an unsupported format.');
         }
+        $originalName = $request->file('file')->getClientOriginalName();
+        $fileName = pathinfo($originalName, PATHINFO_FILENAME);
 
         $preview = array_slice($rows, 0, 30);
         $types = $this->inferColumnTypes($headers, $rows);
         $charts = $this->buildCharts($headers, $rows, $types);
 
-        return view('csv.dashboard', compact('preview', 'types', 'charts'));
+        return redirect()->route('csv.dashboard')->with(compact('preview','types','charts','fileName'));
+    }
+
+    public function dashboard()
+    {
+        $preview = session('preview', []);
+        $types   = session('types', []);
+        $charts  = session('charts', []);
+        $fileName = session('fileName', 'insights');
+
+        if (!$preview && !$types && !$charts) {
+            return redirect()->route('csv.form');
+        }
+
+        return view('csv.dashboard', compact('preview','types','charts','fileName'));
     }
 }

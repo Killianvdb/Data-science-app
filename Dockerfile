@@ -35,7 +35,7 @@ WORKDIR /app
 COPY composer.json composer.lock ./
 
 # 6. Install PHP dependencies
-RUN composer install --no-dev --prefer-dist --optimize-autoloader
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
 # 7. Copy package.json for Node dependencies
 COPY package*.json ./
