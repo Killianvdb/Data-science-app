@@ -435,7 +435,7 @@ def clean_text_columns(df: pd.DataFrame) -> pd.DataFrame:
     _safe_stderr("\n   Text quality normalization...")
 
     for col in df.columns:
-        if df[col].dtype != 'object':
+        if not (df[col].dtype == 'object' or str(df[col].dtype) == 'str'):
             continue
 
         col_type = _detect_text_column_type(col)
@@ -727,15 +727,14 @@ class DataCleaner:
                 for encoding in ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252', 'utf-16']:
                     try:
                         df = pd.read_csv(path, sep=None, engine='python',
-                                         encoding=encoding, on_bad_lines='skip',
-                                         dtype=object)
+                                         encoding=encoding, on_bad_lines='skip')
                         _safe_stderr(f"✅ Loaded with encoding: {encoding}")
                         break
                     except UnicodeDecodeError:
                         continue
                     except Exception:
                         try:
-                            df = pd.read_csv(path, encoding=encoding, on_bad_lines='skip', dtype=object)
+                            df = pd.read_csv(path, encoding=encoding, on_bad_lines='skip')
                             break
                         except Exception:
                             continue
@@ -746,18 +745,9 @@ class DataCleaner:
                 raise ValueError(f"Unsupported format: {ext}")
 
             if df is not None:
-                # Force object dtype — pandas 2.x lit les colonnes string en StringDtype
-                # ce qui casse les opérations NaN et .where() plus bas
-                for col in df.columns:
-                    try:
-                        df[col] = df[col].astype(object)
-                    except Exception:
-                        pass
                 for col in df.columns:
                     if df[col].dtype == 'object':
-                        # Ne pas faire astype(str) — cela forcerait StringDtype en pandas 2.x
-                        # dtype=object est déjà garanti par read_csv(dtype=object) ci-dessus
-                        df[col] = df[col].str.strip().str.lstrip("'")
+                        df[col] = df[col].astype(str).str.strip().str.lstrip("'")
                         df[col] = df[col].replace(
                             ['nan', 'NaN', 'None', '', 'null', 'NULL', 'Null', 'N/A', 'n/a', 'NA'],
                             np.nan
