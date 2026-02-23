@@ -9,18 +9,19 @@ use League\Csv\Reader;
 
 class AiChatController extends Controller
 {
-    private string $groqApiKey;
-    private string $groqModel = 'llama-3.3-70b-versatile';
+    private string $mistralApiKey;
+    private string $model   = 'mistral-large-latest';
+    private string $apiBase = 'https://api.mistral.ai/v1/chat/completions';
 
     public function __construct()
     {
-        $key = config('services.groq.api_key') ?? env('GROQ_API_KEY');
+        $key = config('services.mistral.api_key') ?? env('MISTRAL_API_KEY');
 
         if (!$key) {
-            throw new \RuntimeException('GROQ_API_KEY is not set. Add it to your .env file.');
+            throw new \RuntimeException('MISTRAL_API_KEY is not set. Add it to your .env file.');
         }
 
-        $this->groqApiKey = $key;
+        $this->mistralApiKey = $key;
     }
 
     /**
@@ -48,18 +49,15 @@ class AiChatController extends Controller
         if (!$csvContext) {
             return response()->json([
                 'success' => false,
-                'error'   => 'Aucun fichier CSV trouvé. Veuillez d\'abord uploader au moins un fichier.',
+                'error'   => 'No CSV file found. Please upload at least one file first.',
             ], 422);
         }
 
         // 2. Retrieve conversation history from session
         $history = Session::get('chat_history', []);
 
-        // 3. Build messages array for Groq
-        $messages = $this->buildMessages($history, $csvContext, $userMessage);
-
-        // 4. Call Groq API
-        $response = $this->callGroq($messages);
+        // 3. Call Mistral API
+        $response = $this->callMistral($csvContext, $history, $userMessage);
 
         if (!$response['success']) {
             return response()->json([
@@ -70,7 +68,7 @@ class AiChatController extends Controller
 
         $aiReply = $response['content'];
 
-        // 5. Persist conversation history (keep last 20 turns)
+        // 4. Persist conversation history (keep last 20 turns)
         $history[] = ['role' => 'user',      'content' => $userMessage];
         $history[] = ['role' => 'assistant', 'content' => $aiReply];
         if (count($history) > 20) {
@@ -90,40 +88,33 @@ class AiChatController extends Controller
     public function uploadCsv(Request $request)
     {
         $request->validate([
-            'csv_file' => 'required|file|mimes:csv,txt|max:10240',
+            'csv_file' => 'required|file|mimes:csv,txt|max:20480',
         ]);
 
         $file         = $request->file('csv_file');
         $originalName = $file->getClientOriginalName();
         $path         = $file->store('csv_uploads', 'local');
 
-        // Try both possible storage paths
         $fullPath = storage_path("app/private/{$path}");
         if (!file_exists($fullPath)) {
             $fullPath = storage_path("app/{$path}");
         }
 
-        // Load existing files list from session
         $csvFiles = Session::get('csv_files', []);
-
-        // If same filename exists, replace it
         $csvFiles = array_values(array_filter($csvFiles, fn($f) => $f['name'] !== $originalName));
 
-        // Add new file
         $csvFiles[] = [
             'name'     => $originalName,
             'path'     => $path,
             'uploaded' => now()->format('H:i'),
         ];
 
-        // Cap at 5 files maximum
         if (count($csvFiles) > 5) {
             $csvFiles = array_slice($csvFiles, -5);
         }
 
         Session::put('csv_files', $csvFiles);
 
-        // Return preview of the newly uploaded file
         $preview = $this->getPreviewRows($fullPath, 5);
 
         return response()->json([
@@ -193,7 +184,6 @@ class AiChatController extends Controller
         $csvFiles = Session::get('csv_files', []);
         if (empty($csvFiles)) return null;
 
-        // Adjust rows per file based on number of files to stay within token limits
         $fileCount   = count($csvFiles);
         $rowsPerFile = match(true) {
             $fileCount >= 4 => 25,
@@ -222,8 +212,8 @@ class AiChatController extends Controller
         if (empty($allContexts)) return null;
 
         $count = count($allContexts);
-        $intro = "The user has uploaded {$count} CSV file(s). Analyze them together when relevant.\n\n";
-        return $intro . implode("\n\n", $allContexts);
+        return "The user has uploaded {$count} CSV file(s). Analyze them together when relevant.\n\n"
+            . implode("\n\n", $allContexts);
     }
 
     /**
@@ -263,11 +253,13 @@ class AiChatController extends Controller
     }
 
     /**
-     * Build messages array for Groq with multi-file awareness.
+     * Call the Mistral API.
+     * Mistral uses OpenAI-compatible format: system + user/assistant messages.
      */
-    private function buildMessages(array $history, string $csvContext, string $userMessage): array
+    private function callMistral(string $csvContext, array $history, string $userMessage): array
     {
-        $systemPrompt = <<<PROMPT
+        try {
+            $systemPrompt = <<<PROMPT
 You are an expert data analyst assistant. The user has uploaded one or more CSV files.
 
 {$csvContext}
@@ -281,33 +273,30 @@ Instructions:
 - Format numbers nicely (e.g. 1,234 instead of 1234).
 - Use bullet points or Markdown tables when it improves clarity.
 - Keep answers concise but complete.
-- Respond in the same language the user uses (French, English, or Dutch).
+- Respond in the same language the user uses (English, French, or Dutch).
 - Never make up data that is not in the context.
 PROMPT;
 
-        $messages = [['role' => 'system', 'content' => $systemPrompt]];
+            // Build messages — Mistral uses same format as OpenAI
+            $messages = [
+                ['role' => 'system', 'content' => $systemPrompt],
+            ];
 
-        foreach ($history as $turn) {
-            $messages[] = $turn;
-        }
+            foreach ($history as $turn) {
+                $messages[] = [
+                    'role'    => $turn['role'], // 'user' or 'assistant'
+                    'content' => $turn['content'],
+                ];
+            }
 
-        $messages[] = ['role' => 'user', 'content' => $userMessage];
+            $messages[] = ['role' => 'user', 'content' => $userMessage];
 
-        return $messages;
-    }
-
-    /**
-     * Call the Groq Chat Completion API.
-     */
-    private function callGroq(array $messages): array
-    {
-        try {
             /** @var \Illuminate\Http\Client\Response $response */
             $response = Http::withHeaders([
-                'Authorization' => "Bearer {$this->groqApiKey}",
+                'Authorization' => "Bearer {$this->mistralApiKey}",
                 'Content-Type'  => 'application/json',
-            ])->timeout(30)->post('https://api.groq.com/openai/v1/chat/completions', [
-                'model'       => $this->groqModel,
+            ])->timeout(30)->post($this->apiBase, [
+                'model'       => $this->model,
                 'messages'    => $messages,
                 'temperature' => 0.3,
                 'max_tokens'  => 1024,
@@ -316,7 +305,7 @@ PROMPT;
             if ($response->failed()) {
                 return [
                     'success' => false,
-                    'error'   => 'Groq API error: ' . $response->status(),
+                    'error'   => 'Mistral API error: ' . $response->status() . ' — ' . $response->body(),
                 ];
             }
 
