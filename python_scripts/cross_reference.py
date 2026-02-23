@@ -857,7 +857,7 @@ class CrossReferencePipeline:
             _safe_stderr(f"📚 Refs: {[os.path.basename(r) for r in ref_files]}")
         _safe_stderr(f"{'='*60}")
 
-        # ── Étape 0 : Charger le fichier principal ──────────────────────────────
+        # Chargement avec normalisation des dates intégrée
         df = load_csv(main_file, llm=self.llm)
         if df is None:
             return None
@@ -865,15 +865,14 @@ class CrossReferencePipeline:
         rapport = {
             "main_file": main_file, "ref_files": ref_files,
             "initial_rows": len(df), "initial_cols": len(df.columns),
-            "cross_reference": [], "dedup_after_merge": 0,
-            "validation": [], "derived_columns": [], "enrichment": [],
+            "cross_reference": [], "validation": [],
+            "derived_columns": [], "enrichment": [],
             "final_rows": 0, "final_cols": 0, "null_remaining": 0
         }
 
-        # ── Étape 1 : MERGE des fichiers de référence ────────────────────────
-        # On fusionne AVANT de dédupliquer pour détecter les doublons inter-fichiers
+        # 1. Cross Reference
         if ref_files:
-            _safe_stderr(f"\n{'─'*40}\n1  MERGE & CROSS REFERENCE\n{'─'*40}")
+            _safe_stderr(f"\n{'─'*40}\n1️⃣  CROSS REFERENCE\n{'─'*40}")
             for ref_file in ref_files:
                 df_ref = load_csv(ref_file, llm=self.llm)
                 if df_ref is None:
@@ -881,56 +880,40 @@ class CrossReferencePipeline:
                 df, ref_r = self.cross_ref_engine.enrich(df, df_ref, os.path.basename(ref_file))
                 rapport["cross_reference"].append(ref_r)
         else:
-            _safe_stderr(f"\n   Mode simple (pas de references)")
+            _safe_stderr(f"\n   ℹ️  Mode simple (pas de références)")
 
-        # ── Étape 2 : DÉDUPLICATION sur le dataset fusionné ──────────────────
-        # Après le merge, des doublons inter-fichiers peuvent apparaître.
-        # On déduplique une seule fois ici sur l'ensemble complet.
-        _safe_stderr(f"\n{'─'*40}\n2  DEDUPLICATION POST-MERGE\n{'─'*40}")
-        rows_before = len(df)
-        df = df.drop_duplicates()
-        dups_removed = rows_before - len(df)
-        rapport["dedup_after_merge"] = dups_removed
-        if dups_removed > 0:
-            _safe_stderr(f"   {dups_removed} duplicates removed after merge")
-        else:
-            _safe_stderr(f"   No duplicates found")
-
-        # ── Étape 3 : VALIDATION CONTEXTUELLE ────────────────────────────────
-        # Le validator reçoit le dataset complet et fusionné
-        _safe_stderr(f"\n{'─'*40}\n3  CONTEXT-AWARE VALIDATION\n{'─'*40}")
+        # 2. Validation
+        _safe_stderr(f"\n{'─'*40}\n2️⃣  VALIDATION MÉTIER\n{'─'*40}")
         df, val_r = self.validator.validate(df, filename=os.path.basename(main_file))
         rapport["validation"] = val_r
 
-        # ── Étape 4 : RECALCUL colonnes dérivées ─────────────────────────────
-        _safe_stderr(f"\n{'─'*40}\n4  RECALCUL COLONNES DERIVEES\n{'─'*40}")
+        # 3. Recalcul colonnes dérivées
+        _safe_stderr(f"\n{'─'*40}\n3️⃣  RECALCUL COLONNES DÉRIVÉES\n{'─'*40}")
         df, der_r = self.derived_recalc.recalculate(df)
         rapport["derived_columns"] = der_r
 
-        # ── Étape 5 : LLM ENRICHER ───────────────────────────────────────────
+        # 4. LLM Enricher
         if self.llm_enricher and self.llm.available:
-            _safe_stderr(f"\n{'─'*40}\n5  LLM ENRICHER\n{'─'*40}")
+            _safe_stderr(f"\n{'─'*40}\n4️⃣  LLM ENRICHER\n{'─'*40}")
             df, enr_r = self.llm_enricher.enrich(
                 df, ref_columns=self.cross_ref_engine.ref_columns
             )
             rapport["enrichment"] = enr_r
 
-        # ── Étape 6 : IMPUTATION FINALE ──────────────────────────────────────
-        _safe_stderr(f"\n{'─'*40}\n6  IMPUTATION FINALE\n{'─'*40}")
+        # 5. Imputation finale
+        _safe_stderr(f"\n{'─'*40}\n5️⃣  IMPUTATION FINALE\n{'─'*40}")
         df = self.imputer.impute(df)
 
-        # ── Étape 7 : EXPORT ─────────────────────────────────────────────────
-        _safe_stderr(f"\n{'─'*40}\n7  EXPORT\n{'─'*40}")
+        # 6. Export
+        _safe_stderr(f"\n{'─'*40}\n6️⃣  EXPORT\n{'─'*40}")
         rapport.update({"final_rows": len(df), "final_cols": len(df.columns),
                          "null_remaining": int(df.isna().sum().sum())})
         out_csv, out_json = export_results(df, main_file, output_dir, rapport)
 
         _safe_stderr(f"\n{'='*60}")
-        _safe_stderr(f"PIPELINE TERMINE")
-        _safe_stderr(f"   Lignes  : {rapport['initial_rows']} -> {rapport['final_rows']}")
-        if rapport.get('dedup_after_merge', 0) > 0:
-            _safe_stderr(f"   Doublons supprimes apres merge: {rapport['dedup_after_merge']}")
-        _safe_stderr(f"   Colonnes: {rapport['initial_cols']} -> {rapport['final_cols']}")
+        _safe_stderr(f"✅ PIPELINE TERMINÉ")
+        _safe_stderr(f"   Lignes  : {rapport['initial_rows']} → {rapport['final_rows']}")
+        _safe_stderr(f"   Colonnes: {rapport['initial_cols']} → {rapport['final_cols']}")
         _safe_stderr(f"   NULL restants: {rapport['null_remaining']}")
         _safe_stderr(f"{'='*60}")
 
