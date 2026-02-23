@@ -12,6 +12,7 @@ use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\AiChatController;
 
 
+
 /*
 |--------------------------------------------------------------------------
 | Public Routes

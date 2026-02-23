@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            {{ __('AI Chat') }}
+            {{ __('AI Chat Assistant') }}
         </h2>
     </x-slot>
 <style>
@@ -28,13 +28,14 @@
 
     .chat-layout {
         display: grid;
-        grid-template-columns: 300px 1fr;
-        height: 82vh;
-        border-radius: 16px;
+        grid-template-columns: 320px 1fr;
+        height: calc(100vh - 60px);
+        border-radius: 0;
         overflow: hidden;
         font-family: var(--font-main);
         color: var(--text);
         background: var(--bg);
+        margin: -2rem -2.5rem -1.5rem -2.5rem;
     }
 
     /* ── Sidebar ── */
@@ -137,12 +138,18 @@
     .btn-ghost:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
     .btn-ghost:disabled { opacity: 0.35; cursor: not-allowed; }
 
-    /* ── Main chat ── */
-    .chat-main { display: flex; flex-direction: column; background: var(--bg); }
+    .chat-main {
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+        min-height: 0;  /* critical for nested flex scroll */
+        overflow: hidden;
+    }
 
     .chat-header {
         padding: 14px 22px; border-bottom: 1px solid var(--border);
         display: flex; align-items: center; gap: 12px; background: var(--surface);
+        flex-shrink: 0; /* never compress */
     }
     .chat-header-icon {
         width: 34px; height: 34px; border-radius: 9px;
@@ -159,11 +166,14 @@
 
     /* ── Messages ── */
     .messages-container {
-        flex: 1; overflow-y: auto; padding: 18px 22px;
+        flex: 1; overflow-y: scroll; padding: 18px 22px;
         display: flex; flex-direction: column; gap: 14px; scroll-behavior: smooth;
+        min-height: 0; /* critical — without this flex children won't scroll */
     }
-    .messages-container::-webkit-scrollbar { width: 5px; }
+    .messages-container::-webkit-scrollbar { width: 6px; }
+    .messages-container::-webkit-scrollbar-track { background: transparent; }
     .messages-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .messages-container::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
     .empty-state {
         flex: 1; display: flex; flex-direction: column;
@@ -200,8 +210,9 @@
     .bubble {
         max-width: 74%; padding: 11px 15px; border-radius: 13px;
         font-size: 0.875rem; line-height: 1.65;
+        word-wrap: break-word; overflow-wrap: break-word;
     }
-    .bubble.ai   { background: var(--ai-bg); border: 1px solid var(--border); border-top-left-radius: 4px; }
+    .bubble.ai   { max-width: 85%; background: var(--ai-bg); border: 1px solid var(--border); border-top-left-radius: 4px; }
     .bubble.user { background: var(--user-bg); border: 1px solid rgba(123,97,255,0.25); border-top-right-radius: 4px; }
     .bubble.ai strong { color: var(--accent); }
     .bubble.ai code {
@@ -234,8 +245,13 @@
         40%            { transform: translateY(-5px); opacity: 1; }
     }
 
-    /* ── Input bar ── */
-    .input-bar { padding: 14px 22px; border-top: 1px solid var(--border); background: var(--surface); }
+    /* ── Input bar — always pinned to bottom ── */
+    .input-bar {
+        padding: 14px 22px;
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+        flex-shrink: 0; /* never compress or disappear */
+    }
     .input-wrapper {
         display: flex; align-items: flex-end; gap: 10px;
         background: var(--surface2); border: 1px solid var(--border);
