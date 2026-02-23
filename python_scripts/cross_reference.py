@@ -24,6 +24,14 @@ import re
 import warnings
 warnings.filterwarnings('ignore')
 
+# date_utils optionnel
+DATE_UTILS_AVAILABLE = False
+try:
+    from date_utils import is_date_column, parse_date_column
+    DATE_UTILS_AVAILABLE = True
+except ImportError:
+    pass
+
 # ============================================================================
 # GEMINI LLM CLIENT (remplace Gemini)
 # ============================================================================
@@ -68,17 +76,24 @@ class GeminiLLM:
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0}
         }).encode()
-        try:
-            req = urllib.request.Request(
-                self.API_URL + "?key=" + self._api_key,
-                data=payload, headers={"Content-Type": "application/json"}, method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=60) as r:
-                resp = _j.loads(r.read())
-            return resp["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception as e:
-            _safe_stderr(f"WARNING: Gemini API error: {e}")
-            return None
+        import time
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(
+                    self.API_URL + "?key=" + self._api_key,
+                    data=payload, headers={"Content-Type": "application/json"}, method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    resp = _j.loads(r.read())
+                return resp["candidates"][0]["content"]["parts"][0]["text"]
+            except Exception as e:
+                if '429' in str(e) and attempt < 2:
+                    wait = 30 * (attempt + 1)
+                    _safe_stderr(f"WARNING: Gemini rate limit (429), retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    _safe_stderr(f"WARNING: Gemini API error: {e}")
+                    return None
 
 
 def _safe_stderr(*args, **kwargs):
