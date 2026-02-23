@@ -6,16 +6,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     libpq-dev \
     libzip-dev \
+    zip \
+    unzip \
     libonig-dev \
     libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
     libicu-dev \
-    unzip \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Install PHP extensions
-RUN docker-php-ext-install pdo pdo_pgsql zip opcache bcmath mbstring gd intl
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+       pdo pdo_pgsql zip opcache bcmath mbstring gd intl
 
 RUN apt-get update && apt-get install -y docker.io && rm -rf /var/lib/apt/lists/*
 
@@ -30,7 +35,7 @@ WORKDIR /app
 COPY composer.json composer.lock ./
 
 # 6. Install PHP dependencies
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+RUN composer install --no-dev --prefer-dist --optimize-autoloader
 
 # 7. Copy package.json for Node dependencies
 COPY package*.json ./

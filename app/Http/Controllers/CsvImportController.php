@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class CsvImportController extends Controller
 {
@@ -67,6 +69,12 @@ class CsvImportController extends Controller
                 $assoc[$key] = isset($row[$i]) ? trim((string)$row[$i]) : null;
             }
 
+            $nonEmpty = false;
+            foreach ($assoc as $v) {
+                if ($v !== null && trim((string)$v) !== '') { $nonEmpty = true; break; }
+            }
+            if (!$nonEmpty) continue;
+
             $rows[] = $assoc;
             $count++;
 
@@ -75,6 +83,217 @@ class CsvImportController extends Controller
 
         return [$headers ?? [], $rows, $delimiter];
     }
+
+private function parseTxtLikeCsv(string $tmpPath, int $maxRows = 3000): array
+    {
+        return $this->parseCsvAssoc($tmpPath, $maxRows);
+    }
+
+    private function parseJson(string $tmpPath, int $maxRows = 3000): array
+    {
+        $raw = file_get_contents($tmpPath);
+        if ($raw === false) return [[], []];
+
+        $data = json_decode($raw, true);
+        if (json_last_error() !== JSON_ERROR_NONE) return [[], []];
+
+        $rows = [];
+
+        if (is_array($data) && array_is_list($data)) {
+            $rows = $data;
+        } elseif (is_array($data)) {
+            foreach ($data as $v) {
+                if (is_array($v) && array_is_list($v)) {
+                    $rows = $v;
+                    break;
+                }
+            }
+        }
+
+        if (!is_array($rows) || count($rows) === 0) return [[], []];
+
+        $assocRows = [];
+        $headersSet = [];
+
+        foreach (array_slice($rows, 0, $maxRows) as $r) {
+            if (!is_array($r)) continue;
+
+            if (array_is_list($r)) {
+                $tmp = [];
+                foreach ($r as $i => $val) $tmp["col_$i"] = $val;
+                $r = $tmp;
+            }
+
+            $clean = [];
+            foreach ($r as $k => $v) {
+                $hk = $this->normalizeHeader((string)$k);
+                if ($hk === '') continue;
+
+                if (is_array($v) || is_object($v)) {
+                    $v = json_encode($v, JSON_UNESCAPED_UNICODE);
+                }
+
+                $clean[$hk] = is_null($v) ? null : trim((string)$v);
+                $headersSet[$hk] = true;
+            }
+
+            if (count($clean)) $assocRows[] = $clean;
+        }
+
+        $headers = array_keys($headersSet);
+
+        foreach ($assocRows as &$r) {
+            foreach ($headers as $h) {
+                if (!array_key_exists($h, $r)) $r[$h] = null;
+            }
+        }
+
+        return [$headers, $assocRows];
+    }
+
+    private function parseXml(string $tmpPath, int $maxRows = 3000): array
+    {
+        $raw = file_get_contents($tmpPath);
+        if ($raw === false) return [[], []];
+
+        libxml_use_internal_errors(true);
+        $xml = simplexml_load_string($raw, 'SimpleXMLElement', LIBXML_NOCDATA);
+        if (!$xml) return [[], []];
+
+
+        $children = $xml->children();
+        if (count($children) === 0) return [[], []];
+
+        if (count($children) === 1) {
+            $maybe = $children[0]->children();
+            if (count($maybe) > 0) {
+                $children = $maybe;
+            }
+        }
+
+        $rows = [];
+        $headersSet = [];
+
+        $i = 0;
+        foreach ($children as $node) {
+            if ($i >= $maxRows) break;
+
+            $r = [];
+
+            foreach ($node->attributes() as $k => $v) {
+                $hk = $this->normalizeHeader((string)$k);
+                $r[$hk] = trim((string)$v);
+                $headersSet[$hk] = true;
+            }
+
+            foreach ($node->children() as $k => $v) {
+                $hk = $this->normalizeHeader((string)$k);
+                if ($hk === '') continue;
+
+                if (count($v->children()) > 0) {
+                    $r[$hk] = json_encode($v, JSON_UNESCAPED_UNICODE);
+                } else {
+                    $r[$hk] = trim((string)$v);
+                }
+
+
+                $headersSet[$hk] = true;
+            }
+
+            if (count($r)) {
+                $rows[] = $r;
+                $i++;
+            }
+        }
+
+        $headers = array_keys($headersSet);
+
+        foreach ($rows as &$r) {
+            foreach ($headers as $h) {
+                if (!array_key_exists($h, $r)) $r[$h] = null;
+            }
+        }
+
+        return [$headers, $rows];
+    }
+
+    private function makeHeadersUnique(array $headers): array
+    {
+        $seen = [];
+        $out = [];
+
+        foreach ($headers as $h) {
+            $base = $h === '' ? 'col' : $h;
+            if (!isset($seen[$base])) {
+                $seen[$base] = 1;
+                $out[] = $base;
+            } else {
+                $seen[$base]++;
+                $out[] = $base . '_' . $seen[$base];
+            }
+        }
+        return $out;
+    }
+
+    private function parseExcel(string $tmpPath, int $maxRows = 3000): array
+    {
+        $spreadsheet = IOFactory::load($tmpPath);
+        $sheet = $spreadsheet->getActiveSheet();
+        $data = $sheet->toArray(null, true, true, true); // keys A,B,C...
+
+        if (!$data || count($data) < 1) return [[], []];
+
+        $firstRow = array_shift($data);
+        $headers = [];
+        $colKeys = array_keys($firstRow);
+
+        foreach ($colKeys as $colKey) {
+            $headers[$colKey] = $this->normalizeHeader((string)($firstRow[$colKey] ?? ''));
+        }
+
+        $allEmpty = true;
+        foreach ($headers as $h) {
+            if ($h !== '') { $allEmpty = false; break; }
+        }
+        if ($allEmpty) {
+            foreach ($colKeys as $colKey) $headers[$colKey] = "col_" . strtolower($colKey);
+        }
+
+        $finalHeaders = [];
+        
+        foreach ($headers as $colKey => $h) {
+            if ($h !== '') $finalHeaders[] = $h;
+        }
+        $finalHeaders = $this->makeHeadersUnique($finalHeaders);
+
+        $rows = [];
+        $count = 0;
+
+        foreach ($data as $row) {
+            if ($count >= $maxRows) break;
+
+            $assoc = [];
+            foreach ($headers as $colKey => $h) {
+                if ($h === '') continue;
+                $val = $row[$colKey] ?? null;
+                $assoc[$h] = is_null($val) ? null : trim((string)$val);
+            }
+
+            $nonEmpty = false;
+            foreach ($assoc as $v) {
+                if ($v !== null && trim((string)$v) !== '') { $nonEmpty = true; break; }
+            }
+            if (!$nonEmpty) continue;
+
+            $rows[] = $assoc;
+            $count++;
+        }
+
+        return [$finalHeaders, $rows];
+    }
+
+
+
 
     private function parseNumber(?string $value): ?float
     {
@@ -303,13 +522,40 @@ class CsvImportController extends Controller
         return $charts;
     }
 
+    private function parseUploadedFile(Request $request, int $maxRows = 3000): array
+    {
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        $tmpPath = $file->getRealPath();
+
+        return match ($ext) {
+            'csv' => (function() use ($tmpPath, $maxRows) {
+                [$headers, $rows] = $this->parseCsvAssoc($tmpPath, $maxRows);
+                return [$headers, $rows];
+            })(),
+            'txt' => (function() use ($tmpPath, $maxRows) {
+                [$headers, $rows] = $this->parseTxtLikeCsv($tmpPath, $maxRows);
+                return [$headers, $rows];
+            })(),
+            'json' => $this->parseJson($tmpPath, $maxRows),
+            'xml'  => $this->parseXml($tmpPath, $maxRows),
+            'xlsx', 'xls' => $this->parseExcel($tmpPath, $maxRows),
+            default => [[], []],
+        };
+    }
+
+
     public function import(Request $request)
     {
         $request->validate([
-            'file' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
+            'file' => ['required', 'file', 'mimes:csv,txt,json,xml,xlsx,xls','max:10240'],
         ]);
 
-        [$headers, $rows] = $this->parseCsvAssoc($request->file('file')->getRealPath(), 3000);
+        [$headers, $rows] = $this->parseUploadedFile($request, 3000);
+
+        if (count($headers) === 0 || count($rows) === 0) {
+            return back()->with('error', 'Could not read the file or it is empty / in an unsupported format.');
+        }
 
         $preview = array_slice($rows, 0, 30);
         $types = $this->inferColumnTypes($headers, $rows);
