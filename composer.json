@@ -13,6 +13,7 @@
         "laravel/cashier": "^16.2",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1",
+        "league/csv": "*",
         "symfony/process": "*"
     },
     "require-dev": {

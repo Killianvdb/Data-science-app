@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\AiChatController;
+use App\Http\Controllers\CsvImportController;
+
 
 
 
@@ -45,8 +47,8 @@ Route::prefix('ai-chat')->name('ai-chat.')->group(function () {
 Route::middleware('auth')->group(function () {
 
 
-
-
+    Route::get('/csv/import', [CsvImportController::class, 'form'])->name('csv.form');
+    Route::post('/csv/import', [CsvImportController::class, 'import'])->name('csv.import');
 
     // Visualization Routes
     Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
@@ -118,10 +120,6 @@ Route::post('/stripe/webhook', [StripeWebhookController::class, 'handleWebhook']
 
 
 
-// routes/web.php
-use App\Http\Controllers\CsvImportController;
 
-Route::get('/csv/import', [CsvImportController::class, 'form'])->name('csv.form');
-Route::post('/csv/import', [CsvImportController::class, 'import'])->name('csv.import');
 
 require __DIR__.'/auth.php';
