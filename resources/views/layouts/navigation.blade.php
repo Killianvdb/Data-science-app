@@ -21,7 +21,13 @@
                             {{ __('Clean My Data') }}
                         </x-nav-link>
 
-                        
+                        <x-nav-link :href="route('csv.form')" :active="request()->routeIs('csv.*')">
+                            {{ __('Visualize Data') }}
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('pricing')" :active="request()->routeIs('pricing')">
+                            {{ __('Pricing') }}
+                        </x-nav-link>
 
                         <x-nav-link :href="route('datasets.files')" :active="request()->routeIs('datasets.files')">
                             {{ __('My Datasets') }}

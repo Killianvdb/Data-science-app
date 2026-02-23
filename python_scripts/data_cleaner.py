@@ -79,192 +79,16 @@ class GeminiLLM:
 
 
 def _safe_stderr(*args, **kwargs):
-    """Print vers stderr compatible Windows (gère les emojis/accents)."""
-    import io
-    kwargs['file'] = sys.stderr
+    """Print vers stderr compatible Windows."""
+    text = ' '.join(str(a) for a in args)
     try:
-        _safe_stderr(*args, **kwargs)
+        print(text, file=sys.stderr)
     except UnicodeEncodeError:
-        # Fallback : encoder en ASCII avec remplacement
-        text = ' '.join(str(a) for a in args)
         safe = text.encode('ascii', errors='replace').decode('ascii')
-        print(safe)
+        print(safe, file=sys.stderr)
 
 # ============================================================================
 # GEMINI LLM CLIENT (remplace Gemini — urllib built-in, aucun package requis)
-# ============================================================================
-
-class GeminiLLM:
-    """Client Gemini 2.0 Flash via REST.
-    Variable d'environnement requise : GEMINI_API_KEY
-    Interface identique a l'ancien GeminiLLM : .available, .model, .call()
-    """
-    _API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-
-    def detect_column_types(self, profile: dict) -> dict | None:
-        """Détecte les types de colonnes (date, numérique, catégoriel, etc.)"""
-        if not self.available:
-            return None
-
-        prompt = f"""Analyze this dataset profile and classify each column type.
-
-Dataset profile:
-{json.dumps(profile, indent=2)}
-
-For EACH column, respond with a JSON object:
-- is_date: boolean
-- can_be_negative: boolean (false for prices, ages, quantities; true for temperatures, balances, profits)
-- reason: brief explanation
-
-Respond ONLY valid JSON (no markdown):
-{{
-  "column_name": {{
-    "is_date": true/false,
-    "can_be_negative": true/false,
-    "reason": "..."
-  }}
-}}"""
-
-        try:
-            _safe_stderr("🤖 Gemini LLM → type detection...")
-            resp = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0,
-                max_tokens=1500,
-                response_format={"type": "json_object"}
-            )
-            result = json.loads(resp.choices[0].message.content)
-            _safe_stderr(f"✅ Types detected for {len(result)} columns")
-            return result
-        except Exception as e:
-            _safe_stderr(f"⚠️  LLM type detection error: {e}")
-            return None
-
-    # ------------------------------------------------------------------
-    # 2. Formatage LLM des dates (cœur de la v4)
-    # ------------------------------------------------------------------
-    def format_dates(self, column_name: str, raw_values: list[str]) -> dict | None:
-        """
-        Envoie une liste de valeurs brutes au LLM et récupère :
-        {
-          "original_value": "YYYY-MM-DD or null",
-          ...
-        }
-        Le LLM comprend n'importe quel format humain (01/mar/2003, March 1 2003, etc.)
-        """
-        if not self.available:
-            return None
-
-        # On envoie maximum 200 valeurs uniques pour économiser les tokens
-        unique_vals_raw = list(dict.fromkeys(str(v) for v in raw_values if v is not None and str(v).strip()))[:30]
-
-        if not unique_vals_raw:
-            return None
-
-        # Pré-traitement : normaliser les mois non-anglais (août→August, mai→May, etc.)
-        unique_vals, fr_translations = _normalize_foreign_months(unique_vals_raw)
-
-        example_in = unique_vals[:3]
-        prompt = f"""You are a date parser. Your ONLY job: convert date strings to ISO format.
-
-INPUT — list of date strings for column "{column_name}":
-{json.dumps(unique_vals, ensure_ascii=False)}
-
-OUTPUT RULES (STRICT):
-1. Return a FLAT JSON object (no nesting, no arrays)
-2. Each key   = the EXACT original string from the input list
-3. Each value = the ISO date string "YYYY-MM-DD", or null if unparseable
-4. Every input string must appear as a key — do not skip any
-5. No extra keys, no explanations, no markdown
-
-EXAMPLE (structure only):
-Input:  {json.dumps(example_in, ensure_ascii=False)}
-Output: {{"01/mar/2003": "2003-03-01", "15-Jun-1990": "1990-06-15", "1990-07-22": "1990-07-22"}}
-
-Respond with ONLY the JSON object."""
-
-        try:
-            resp = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0,
-                max_tokens=1000,
-            )
-            raw_text = resp.choices[0].message.content.strip()
-            import re as _re
-            m = _re.search(r'\{.*\}', raw_text, _re.DOTALL)
-            if not m:
-                return None
-            raw_mapping = json.loads(m.group(0))
-            mapping_normalized = flatten_llm_date_response(raw_mapping, unique_vals)
-            # Restaurer les clés originales (avant traduction des mois)
-            mapping = {}
-            for norm_key, iso_val in mapping_normalized.items():
-                original_key = fr_translations.get(norm_key, norm_key)
-                mapping[original_key] = iso_val
-            ok_count = sum(1 for v in mapping.values() if v and v != "null")
-            _safe_stderr(f"   ✅ LLM formatted {ok_count}/{len(unique_vals)} unique dates for '{column_name}'")
-            return mapping
-        except Exception as e:
-            _safe_stderr(f"   ⚠️  LLM date formatting error for '{column_name}': {e}")
-            return None
-
-    # ------------------------------------------------------------------
-    # 3. Formatage LLM des prix (nettoyage monétaire)
-    # ------------------------------------------------------------------
-    def format_prices(self, column_name: str, raw_values: list[str]) -> dict | None:
-        """
-        Convertit les valeurs monétaires en float.
-        "USD 25.50" → 25.5, "1 200€" → 1200.0, "Free" → 0.0
-        """
-        if not self.available:
-            return None
-
-        unique_vals = list(dict.fromkeys(str(v) for v in raw_values if v is not None and str(v).strip()))[:30]
-
-        if not unique_vals:
-            return None
-
-        prompt = f"""You are a price/amount parser. Convert ALL monetary strings below to plain float numbers.
-
-Column name: "{column_name}"
-Values to convert:
-{json.dumps(unique_vals)}
-
-Rules:
-- Output ONLY a flat JSON object mapping each original string to a float or null
-- "Free", "free", "gratuit" → 0.0
-- Remove ALL currency symbols: $, €, £, ¥, USD, EUR, GBP, etc.
-- Remove spaces used as thousand separators: "1 200" → 1200.0
-- Commas as decimal separators: "25,50" → 25.5
-- Commas as thousand separators: "1,200" → 1200.0 (use context)
-- Null for truly unparseable values
-- No markdown, only JSON
-
-Example: {{"USD 25.50": 25.5, "1 200€": 1200.0, "Free": 0.0, "N/A": null}}"""
-
-        try:
-            resp = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0,
-                max_tokens=1000,
-            )
-            raw = resp.choices[0].message.content.strip()
-            # Extraire le JSON même sans response_format
-            import re as _re
-            m = _re.search(r'\{.*\}', raw, _re.DOTALL)
-            if not m:
-                return None
-            mapping = json.loads(m.group(0))
-            _safe_stderr(f"   ✅ LLM formatted {len(mapping)} unique price values for '{column_name}'")
-            return mapping
-        except Exception as e:
-            _safe_stderr(f"   ⚠️  LLM price formatting error for '{column_name}': {e}")
-            return None
-
-
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
@@ -381,6 +205,84 @@ FALLBACK_DATE_FORMATS = [
 ]
 
 
+
+# ============================================================================
+# MOIS ÉTRANGERS — normalisation avant parsing
+# ============================================================================
+
+_FOREIGN_MONTHS = {
+    'janvier': 'January', 'février': 'February', 'fevrier': 'February',
+    'mars': 'March', 'avril': 'April', 'mai': 'May', 'juin': 'June',
+    'juillet': 'July', 'août': 'August', 'aout': 'August',
+    'septembre': 'September', 'octobre': 'October', 'novembre': 'November',
+    'décembre': 'December', 'decembre': 'December',
+    'jan': 'Jan', 'fév': 'Feb', 'fev': 'Feb', 'avr': 'Apr',
+    'juil': 'Jul', 'aoû': 'Aug', 'aou': 'Aug',
+    'sep': 'Sep', 'oct': 'Oct', 'nov': 'Nov', 'déc': 'Dec', 'dec': 'Dec',
+    'enero': 'January', 'febrero': 'February', 'marzo': 'March',
+    'abril': 'April', 'mayo': 'May', 'junio': 'June', 'julio': 'July',
+    'agosto': 'August', 'septiembre': 'September', 'octubre': 'October',
+    'noviembre': 'November', 'diciembre': 'December',
+    'janeiro': 'January', 'fevereiro': 'February', 'marco': 'March',
+    'junho': 'June', 'julho': 'July', 'setembro': 'September',
+    'outubro': 'October', 'novembro': 'November', 'dezembro': 'December',
+    'gennaio': 'January', 'febbraio': 'February', 'aprile': 'April',
+    'maggio': 'May', 'giugno': 'June', 'luglio': 'July',
+    'settembre': 'September', 'ottobre': 'October', 'dicembre': 'December',
+}
+
+_FOREIGN_RE = re.compile(
+    r'\b(' + '|'.join(re.escape(k) for k in sorted(_FOREIGN_MONTHS, key=len, reverse=True)) + r')\b',
+    flags=re.IGNORECASE
+)
+
+
+def _normalize_foreign_months(values: list) -> tuple:
+    """Traduit les mois non-anglais. Retourne (valeurs_normalisées, dict_traduction_inverse)."""
+    normalized, translations = [], {}
+    for v in values:
+        norm = _FOREIGN_RE.sub(lambda m: _FOREIGN_MONTHS.get(m.group(0).lower(), m.group(0)), v)
+        normalized.append(norm)
+        if norm != v:
+            translations[norm] = v
+    return normalized, translations
+
+
+_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
+def flatten_llm_date_response(mapping: dict, raw_vals: list) -> dict:
+    """Normalise la structure JSON retournée par le LLM."""
+    raw_set = set(raw_vals)
+    if len(mapping) == 1:
+        only_val = next(iter(mapping.values()))
+        if isinstance(only_val, dict):
+            mapping = only_val
+    flat = {}
+    for k, v in mapping.items():
+        if isinstance(v, dict):
+            iso = None
+            for subk in ('iso', 'date', 'result', 'parsed', 'formatted', 'value'):
+                if subk in v and isinstance(v[subk], str) and _DATE_RE.match(v[subk]):
+                    iso = v[subk]; break
+            if iso is None:
+                for subv in v.values():
+                    if isinstance(subv, str) and _DATE_RE.match(subv):
+                        iso = subv; break
+            flat[k] = iso
+        elif isinstance(v, str):
+            flat[k] = v if _DATE_RE.match(v) else None
+        else:
+            flat[k] = None
+    matched = sum(1 for k in flat if k in raw_set)
+    if matched < len(raw_vals) * 0.3 and mapping:
+        inverted = {v: k if _DATE_RE.match(k) else None
+                    for k, v in mapping.items() if isinstance(v, str) and v in raw_set}
+        if sum(1 for v in inverted.values() if v) > sum(1 for v in flat.values() if v):
+            flat = inverted
+    return flat
+
+
 def _pandas_fallback_parse(series: pd.Series) -> pd.Series:
     """Tente de parser les dates restantes avec pandas multi-format.
     Normalise les mois non-anglais AVANT le parsing (août→August, mai→May, etc.)
@@ -409,6 +311,179 @@ def _pandas_fallback_parse(series: pd.Series) -> pd.Series:
         parsed[still_null] = chunk
 
     return parsed
+
+
+# ============================================================================
+# TEXT QUALITY — normalisation des colonnes textuelles
+# ============================================================================
+
+# Colonnes géographiques → Title Case (city, country, state, region...)
+_GEO_KEYWORDS = ['city', 'country', 'state', 'region', 'province',
+                  'district', 'town', 'village', 'location', 'area',
+                  'continent', 'territory', 'county', 'parish']
+
+# Colonnes email → toujours lowercase
+_EMAIL_KEYWORDS = ['email', 'mail', 'e-mail', 'courriel']
+
+# Colonnes nom propre → Title Case
+_NAME_KEYWORDS = ['name', 'firstname', 'lastname', 'first_name', 'last_name',
+                   'full_name', 'prenom', 'nom', 'surname']
+
+
+def _detect_text_column_type(col_name: str) -> str:
+    """Retourne 'geo', 'email', 'name', ou 'generic' selon le nom de colonne."""
+    col_lower = col_name.lower().replace('-', '_').replace(' ', '_')
+    if any(kw in col_lower for kw in _EMAIL_KEYWORDS):
+        return 'email'
+    if any(kw in col_lower for kw in _GEO_KEYWORDS):
+        return 'geo'
+    if any(kw in col_lower for kw in _NAME_KEYWORDS):
+        return 'name'
+    return 'generic'
+
+
+def _fuzzy_correct(series: pd.Series, threshold: float = 0.65) -> pd.Series:
+    """
+    Corrige les typos dans une colonne catégorielle par fuzzy matching.
+    
+    Stratégie :
+    1. Grouper les valeurs par similarité pour trouver les clusters
+    2. La valeur la plus fréquente de chaque cluster = canonique
+    3. Toutes les autres → remplacées par la canonique
+
+    Ex: 'Mnoitor','Mointor','Montior' → 'Monitor'
+        'Cahrger','Chagrer','Charegr' → 'Charger'
+        'phoenix','PHOENIX','  Phoenix  ' → 'Phoenix'
+    """
+    from difflib import SequenceMatcher
+
+    value_counts = series.dropna().str.strip().str.lower().value_counts()
+    if len(value_counts) == 0:
+        return series
+
+    vals = list(value_counts.index)  # triés par fréquence décroissante
+
+    # Construire des clusters par similarité
+    clusters = {}   # canonical_lower → set of variants
+    assigned = {}   # val → canonical_lower
+
+    for val in vals:
+        if val in assigned:
+            continue
+        # Chercher si proche d'un canonique existant
+        best_score = 0
+        best_canon = None
+        for canon in clusters:
+            score = SequenceMatcher(None, val, canon).ratio()
+            if score > best_score:
+                best_score = score
+                best_canon = canon
+
+        if best_score >= threshold and best_canon:
+            clusters[best_canon].add(val)
+            assigned[val] = best_canon
+        else:
+            # Nouveau cluster
+            clusters[val] = {val}
+            assigned[val] = val
+
+    # Map : variant_lower → canonical (le plus fréquent du cluster)
+    correction_map = {}
+    for canon, variants in clusters.items():
+        # Trouver le plus fréquent dans ce cluster
+        best_count = -1
+        best_val = canon
+        for v in variants:
+            if v in value_counts and value_counts[v] > best_count:
+                best_count = value_counts[v]
+                best_val = v
+        for v in variants:
+            correction_map[v] = best_val
+
+    def apply_correction(val):
+        if pd.isna(val):
+            return val
+        v_lower = str(val).strip().lower()
+        return correction_map.get(v_lower, v_lower)
+
+    return series.map(apply_correction)
+
+
+def clean_text_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Nettoyage des colonnes textuelles :
+    
+    1. Toutes les colonnes object :
+       - strip espaces début/fin
+       - 'NAN', 'nan', 'None', '' → NaN
+    
+    2. Colonnes email :
+       - lowercase systématique
+       - strip
+    
+    3. Colonnes géographiques (city, country, state...) :
+       - Title Case (phoenix → Phoenix, SAN DIEGO → San Diego)
+       - strip
+    
+    4. Colonnes noms propres :
+       - Title Case
+    
+    5. Colonnes catégorielles avec typos (product, category...) :
+       - Fuzzy matching pour corriger les erreurs de frappe
+       - Seulement si peu de valeurs uniques (<= 50 valeurs distinctes)
+    """
+    _safe_stderr("\n   Text quality normalization...")
+
+    for col in df.columns:
+        if df[col].dtype != 'object':
+            continue
+
+        col_type = _detect_text_column_type(col)
+        series = df[col].copy()
+
+        # ── Strip + NaN normalization (toutes colonnes) ──────────────────
+        # Force object dtype — StringDtype (pandas 2.x) casse where() + NaN
+        series = series.astype(object).str.strip()
+        nan_vals = {'nan', 'NaN', 'NAN', 'None', 'none', 'NULL',
+                    'null', 'N/A', 'n/a', 'NA', 'na', '', ' ', '<NA>'}
+        series = series.where(~series.isin(nan_vals), other=np.nan)
+
+        # ── Email → lowercase ─────────────────────────────────────────────
+        if col_type == 'email':
+            series = series.str.lower()
+            _safe_stderr(f"      {col}: email lowercase applied")
+
+        # ── Géographique → Title Case ─────────────────────────────────────
+        elif col_type == 'geo':
+            before = series.dropna().nunique()
+            series = series.str.title()
+            after = series.dropna().nunique()
+            _safe_stderr(f"      {col}: geo Title Case ({before} → {after} unique values)")
+
+        # ── Nom propre → Title Case ───────────────────────────────────────
+        elif col_type == 'name':
+            series = series.str.title()
+            _safe_stderr(f"      {col}: name Title Case applied")
+
+        # ── Catégorielle générique → fuzzy correction si peu de valeurs ──
+        else:
+            unique_count = series.dropna().nunique()
+            if 2 <= unique_count <= 50:
+                before_unique = unique_count
+                corrected = _fuzzy_correct(series)
+                # Title Case sur le résultat
+                corrected = corrected.str.title()
+                after_unique = corrected.dropna().nunique()
+                changed = (series.dropna().str.lower() != corrected.dropna().str.lower()).sum()
+                if changed > 0:
+                    series = corrected
+                    _safe_stderr(f"      {col}: {changed} values corrected, {before_unique} → {after_unique} unique")
+                else:
+                    series = corrected
+
+        df[col] = series
+
+    return df
 
 
 def clean_dates(df: pd.DataFrame, decisions: dict, llm: GeminiLLM) -> tuple[pd.DataFrame, dict]:
@@ -546,8 +621,27 @@ _ALWAYS_POSITIVE_KEYWORDS = [
 ]
 
 
+# Colonnes où abs() a du sens (erreur de signe probable : -1200 → 1200)
+_ABS_OK_KEYWORDS = ['salary', 'wage', 'income', 'revenue', 'price', 'cost',
+                    'amount', 'fee', 'charge', 'total', 'balance']
+
+# Colonnes où un négatif impossible → NULL (on ne sait pas la vraie valeur)
+_NULL_ON_NEGATIVE_KEYWORDS = ['age', 'years', 'old', 'tenure',
+                               'distance', 'height', 'weight',
+                               'count', 'quantity', 'qty', 'score',
+                               'rate', 'percent', 'pct']
+
+
 def handle_negatives(df: pd.DataFrame, decisions: dict) -> pd.DataFrame:
-    """Corrige les valeurs négatives incorrectes → valeur absolue"""
+    """
+    Corrige les valeurs négatives impossibles.
+    
+    Stratégie selon le contexte :
+    - salary/price négatif  → abs()  (probablement erreur de signe : -1200 → 1200)
+    - age/count/score négatif → NULL  (on ne peut pas deviner la vraie valeur)
+    
+    Principe : ne jamais inventer une valeur quand on ne sait pas.
+    """
     for col, decision in decisions.items():
         if col not in df.columns:
             continue
@@ -555,14 +649,38 @@ def handle_negatives(df: pd.DataFrame, decisions: dict) -> pd.DataFrame:
             continue
 
         llm_says_positive = decision.get('can_be_negative') is False
-        forced_positive = any(kw in col.lower() for kw in _ALWAYS_POSITIVE_KEYWORDS)
+        col_lower = col.lower()
 
-        if llm_says_positive or forced_positive:
-            neg_count = (df[col] < 0).sum()
-            if neg_count > 0:
-                reason = "LLM" if llm_says_positive else "keyword rule"
-                _safe_stderr(f"   ⚠️  {col}: {neg_count} negatives → abs() [{reason}]")
-                df.loc[df[col] < 0, col] = df.loc[df[col] < 0, col].abs()
+        # Déterminer l'action selon le type de colonne
+        is_abs_col  = any(kw in col_lower for kw in _ABS_OK_KEYWORDS)
+        is_null_col = any(kw in col_lower for kw in _NULL_ON_NEGATIVE_KEYWORDS)
+
+        # LLM peut aussi forcer abs ou null
+        llm_action = decision.get('negative_action', None)  # 'abs' ou 'null'
+
+        should_fix = llm_says_positive or is_abs_col or is_null_col
+        if not should_fix:
+            continue
+
+        neg_mask = df[col] < 0
+        neg_count = neg_mask.sum()
+        if neg_count == 0:
+            continue
+
+        # Décider l'action
+        if llm_action == 'abs' or (is_abs_col and not is_null_col):
+            action = 'abs'
+        elif llm_action == 'null' or is_null_col:
+            action = 'null'
+        else:
+            action = 'null'  # défaut conservateur
+
+        if action == 'abs':
+            df.loc[neg_mask, col] = df.loc[neg_mask, col].abs()
+            _safe_stderr(f"   WARNING {col}: {neg_count} negatives → abs() (sign error assumed)")
+        else:
+            df.loc[neg_mask, col] = np.nan
+            _safe_stderr(f"   WARNING {col}: {neg_count} negatives → NULL (value unknown, human review needed)")
 
     return df
 
@@ -609,14 +727,15 @@ class DataCleaner:
                 for encoding in ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252', 'utf-16']:
                     try:
                         df = pd.read_csv(path, sep=None, engine='python',
-                                         encoding=encoding, on_bad_lines='skip')
+                                         encoding=encoding, on_bad_lines='skip',
+                                         dtype=object)
                         _safe_stderr(f"✅ Loaded with encoding: {encoding}")
                         break
                     except UnicodeDecodeError:
                         continue
                     except Exception:
                         try:
-                            df = pd.read_csv(path, encoding=encoding, on_bad_lines='skip')
+                            df = pd.read_csv(path, encoding=encoding, on_bad_lines='skip', dtype=object)
                             break
                         except Exception:
                             continue
@@ -627,9 +746,18 @@ class DataCleaner:
                 raise ValueError(f"Unsupported format: {ext}")
 
             if df is not None:
+                # Force object dtype — pandas 2.x lit les colonnes string en StringDtype
+                # ce qui casse les opérations NaN et .where() plus bas
+                for col in df.columns:
+                    try:
+                        df[col] = df[col].astype(object)
+                    except Exception:
+                        pass
                 for col in df.columns:
                     if df[col].dtype == 'object':
-                        df[col] = df[col].astype(str).str.strip().str.lstrip("'")
+                        # Ne pas faire astype(str) — cela forcerait StringDtype en pandas 2.x
+                        # dtype=object est déjà garanti par read_csv(dtype=object) ci-dessus
+                        df[col] = df[col].str.strip().str.lstrip("'")
                         df[col] = df[col].replace(
                             ['nan', 'NaN', 'None', '', 'null', 'NULL', 'Null', 'N/A', 'n/a', 'NA'],
                             np.nan
@@ -660,6 +788,10 @@ class DataCleaner:
 
         # 1. Nettoyage de base
         self.df = clean_basic(self.df, self.row_threshold, self.col_threshold)
+
+        # 1b. Nettoyage qualité texte
+        _safe_stderr("\n🔤 Text quality cleaning...")
+        self.df = clean_text_columns(self.df)
 
         # 2. Profil + détection types
         _safe_stderr("\n📊 Column type detection...")

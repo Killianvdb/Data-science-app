@@ -8,232 +8,169 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 
+/**
+ * DataCleaningService v3.0
+ * ========================
+ * Pipeline order (correct) :
+ *   1. cross_reference.py  — merge all files + dedup on full dataset + validate + enrich
+ *   2. data_cleaner.py     — sanitize (dates, prices, negatives) on merged+deduped data
+ *
+ * Why this order?
+ *   - Deduplication on merged data catches inter-file duplicates that per-file cleaning misses
+ *   - Validation runs on the complete picture, not partial data
+ *   - Cleaning standardizes formats after the full dataset is assembled
+ */
 class DataCleaningService
 {
-    protected string $containerName;
-    protected string $workflowPath;
-    protected string $sharedDataPath;
+    protected string $containerName  = 'datasci-python';
+    protected string $sharedDataPath = '/shared_data';
+    protected string $cleanerScript  = '/app/data_cleaner.py';
+    protected string $crossRefScript = '/app/cross_reference.py';
 
-    public function __construct()
+    // =========================================================================
+    // ENTRY POINT: clean a single uploaded file (no reference files)
+    // =========================================================================
+
+    public function cleanUploadedFile(string $pathOrStorage, array $options = []): array
     {
-        $this->containerName = 'datasci-python';
-        $this->workflowPath  = '/app/workflow.py';
-        $this->sharedDataPath = '/shared_data';
+        $inputPath = $this->resolvePath($pathOrStorage);
+        $userId    = Auth::id() ?? 'shared';
+        $outputDir = $this->sharedDataPath . '/cleaned/' . $userId;
+        $this->ensureDir($outputDir);
+
+        return $this->cleanFile($inputPath, $outputDir, $options);
     }
 
     // =========================================================================
-    // CLEAN SINGLE FILE
+    // CLEAN SINGLE FILE — data_cleaner.py
     // =========================================================================
 
-    /**
-     * Clean a single file using data_cleaner.py directly (plus fiable que workflow clean).
-     * Bug fix : on passe un chemin de FICHIER en sortie, pas un dossier.
-     */
     public function cleanFile(string $inputPath, string $outputDir, array $options = []): array
     {
-        $pythonInput = $this->toDockerPath($inputPath);
-
-        // ✅ FIX 1 : construire le chemin du fichier de sortie, pas juste le dossier
-        $basename    = pathinfo($inputPath, PATHINFO_FILENAME);
-        $outputFile  = $outputDir . '/' . $basename . '_CLEANED.csv';
+        $pythonInput  = $this->toDockerPath($inputPath);
+        $basename     = pathinfo($inputPath, PATHINFO_FILENAME);
+        $outputFile   = $outputDir . '/' . $basename . '_CLEANED.csv';
         $pythonOutput = $this->toDockerPath($outputFile);
 
-        $command = [
-            'docker', 'exec',
-            '-e', 'GEMINI_API_KEY=' . (env('GEMINI_API_KEY') ?? ''),  // ✅ FIX 2 : passer la clé API
-            '-e', 'PYTHONUNBUFFERED=1',
-            $this->containerName,
-            'python3', '-u',
-            '/app/data_cleaner.py',   // appel direct, plus sûr que via workflow
+        $command = $this->baseDockerCommand([
+            'python3', '-u', $this->cleanerScript,
             $pythonInput,
             $pythonOutput,
-        ];
+        ]);
 
-        Log::info('Running data_cleaner.py', ['command' => implode(' ', $command)]);
+        Log::info('[DataCleaner] Running', ['input' => $pythonInput, 'output' => $pythonOutput]);
 
         $process = new Process($command);
         $process->setTimeout(3600);
 
         try {
             $process->mustRun();
+            $result = $this->parseJsonOutput($process->getOutput());
 
-            $stdout = $process->getOutput();
-            Log::info('data_cleaner.py stdout', ['stdout' => $stdout]);
-
-            $result = $this->parseJsonOutput($stdout);
-
-            // S'assurer que le fichier nettoyé existe
             if (file_exists($outputFile)) {
                 @chmod($outputFile, 0666);
                 $result['cleaned_file_path'] = $outputFile;
             }
 
+            Log::info('[DataCleaner] Done', $result);
             return $result;
 
         } catch (ProcessFailedException $e) {
-            $stderr = $process->getErrorOutput();
-            $stdout = $process->getOutput();
-            Log::error('data_cleaner.py failed', [
-                'stderr' => $stderr,
-                'stdout' => $stdout,
-            ]);
-            throw new \Exception("Data cleaning failed: " . ($stderr ?: $stdout));
+            $err = $process->getErrorOutput() ?: $process->getOutput();
+            Log::error('[DataCleaner] Failed', ['error' => $err]);
+            throw new \Exception("Data cleaning failed: " . $err);
         }
     }
 
     // =========================================================================
-    // CLEAN UPLOADED FILE (entry point depuis le controller)
-    // =========================================================================
-
-    public function cleanUploadedFile(string $pathOrStorage, array $options = []): array
-    {
-        // Résoudre le chemin réel
-        if (file_exists($pathOrStorage)) {
-            $inputPath = $pathOrStorage;
-        } else {
-            $disk = Storage::disk('local');
-            if (!$disk->exists($pathOrStorage)) {
-                throw new \Exception("File not found: {$pathOrStorage}");
-            }
-            $inputPath = $disk->path($pathOrStorage);
-        }
-
-        $userId = Auth::id() ?? 'shared';
-
-        // Dossier de sortie
-        $outputDir = '/shared_data/cleaned/' . $userId;
-        if (!is_dir($outputDir)) {
-            mkdir($outputDir, 0777, true);
-        }
-
-        $result = $this->cleanFile($inputPath, $outputDir, $options);
-
-        // Construire l'URL de téléchargement
-        $basename    = pathinfo($inputPath, PATHINFO_FILENAME);
-        $cleanedFile = $basename . '_CLEANED.csv';
-        $cleanedPath = $outputDir . '/' . $cleanedFile;
-
-        if (file_exists($cleanedPath)) {
-            @chmod($cleanedPath, 0666);
-            $result['cleaned_file_path'] = $cleanedPath;
-        }
-
-        return $result;
-    }
-
-    // =========================================================================
-    // FULL PIPELINE
+    // FULL PIPELINE — correct order:
+    //   Step 1: cross_reference.py  (merge + dedup + validate + enrich)
+    //   Step 2: data_cleaner.py     (sanitize formats on merged dataset)
     // =========================================================================
 
     public function runFullPipeline(string $mainFile, array $referenceFiles = [], array $options = []): array
     {
-        $pythonMainFile       = $this->toDockerPath($mainFile);
-        $pythonReferenceFiles = array_map(fn($f) => $this->toDockerPath($f), $referenceFiles);
-
         $userId      = Auth::id() ?? 'shared';
+        $mergedDir   = $this->sharedDataPath . '/merged/'  . $userId;
         $cleanedDir  = $this->sharedDataPath . '/cleaned/' . $userId;
         $resultsDir  = $this->sharedDataPath . '/results/' . $userId;
+        $this->ensureDir($mergedDir);
+        $this->ensureDir($cleanedDir);
+        $this->ensureDir($resultsDir);
 
-        $command = [
-            'docker', 'exec',
-            '-e', 'GEMINI_API_KEY=' . (env('GEMINI_API_KEY') ?? ''),  // ✅ FIX 2
-            '-e', 'PYTHONUNBUFFERED=1',
-            $this->containerName,
-            'python3', $this->workflowPath,
-            'full',
-            $pythonMainFile,
-            ...$pythonReferenceFiles,
-            '--clean-dir',    $cleanedDir,
-            '--analysis-dir', $resultsDir,
+        $basename = pathinfo($mainFile, PATHINFO_FILENAME);
+
+        // ── STEP 1: cross_reference.py ───────────────────────────────────────
+        // Merge all files, deduplicate on the full dataset, validate, enrich
+        Log::info('[Pipeline] Step 1: cross_reference.py', [
+            'main'  => $mainFile,
+            'refs'  => $referenceFiles,
+        ]);
+
+        $crossRefResult = $this->runCrossReference(
+            $mainFile, $referenceFiles, $mergedDir, $options
+        );
+
+        // The merged+validated file becomes the input for cleaning
+        $mergedFile = $crossRefResult['output_csv']
+            ?? ($mergedDir . '/' . $basename . '_CLEANED_ENRICHED.csv');
+
+        if (!file_exists($mergedFile)) {
+            // Fallback: cross_reference may have used a different naming pattern
+            $candidates = glob($mergedDir . '/*ENRICHED*.csv') ?: glob($mergedDir . '/*.csv');
+            if (!empty($candidates)) {
+                $mergedFile = $candidates[0];
+            } else {
+                // No reference files — use main file directly
+                $mergedFile = $mainFile;
+            }
+        }
+
+        // ── STEP 2: data_cleaner.py ──────────────────────────────────────────
+        // Sanitize dates, prices, negatives on the merged+deduped dataset
+        Log::info('[Pipeline] Step 2: data_cleaner.py', ['input' => $mergedFile]);
+
+        $cleanResult = $this->cleanFile($mergedFile, $cleanedDir, $options);
+
+        // ── Build final result ────────────────────────────────────────────────
+        $cleanedFile = $cleanedDir . '/' . pathinfo($mergedFile, PATHINFO_FILENAME) . '_CLEANED.csv';
+
+        $result = [
+            'status'               => 'success',
+            'step1_cross_ref'      => $crossRefResult,
+            'step2_cleaned'        => $cleanResult,
+            'merged_file'          => $mergedFile,
+            'cleaned_file_path'    => file_exists($cleanedFile) ? $cleanedFile : ($cleanResult['output_file'] ?? null),
+            'report_file'          => $crossRefResult['output_report'] ?? null,
+            'initial_rows'         => $crossRefResult['final_rows']    ?? 0,
+            'final_rows'           => $cleanResult['rows']             ?? 0,
+            'final_cols'           => $cleanResult['columns']          ?? 0,
+            'null_remaining'       => $cleanResult['null_remaining']   ?? 0,
+            'dedup_after_merge'    => $crossRefResult['rapport']['dedup_after_merge'] ?? 0,
         ];
 
-        if (!empty($options['rules_file'])) {
-            $command[] = '--rules';
-            $command[] = $this->toDockerPath($options['rules_file']);
-        }
-
-        if (!empty($options['no_llm_enricher'])) {
-            $command[] = '--no-llm-enricher';
-        }
-
-        Log::info('Running full pipeline', ['cmd' => implode(' ', $command)]);
-
-        $process = new Process($command);
-        $process->setTimeout(7200);
-
-        try {
-            $process->mustRun();
-
-            $stdout = $process->getOutput();
-            $result = $this->parseJsonOutput($stdout);
-
-            // Chemins des fichiers produits
-            $basename = pathinfo($mainFile, PATHINFO_FILENAME);
-            $result['cleaned_file_path'] = $cleanedDir  . '/' . $basename . '_CLEANED.csv';
-            $result['enriched_file']     = $resultsDir  . '/' . $basename . '_CLEANED_ENRICHED.csv';
-            $result['report_file']       = $resultsDir  . '/' . $basename . '_CLEANED_REPORT.json';
-
-            // Permissions
-            foreach (['cleaned_file_path', 'enriched_file', 'report_file'] as $key) {
-                if (!empty($result[$key]) && file_exists($result[$key])) {
-                    @chmod($result[$key], 0666);
-                }
+        // Permissions
+        foreach (['cleaned_file_path', 'merged_file', 'report_file'] as $key) {
+            if (!empty($result[$key]) && file_exists($result[$key])) {
+                @chmod($result[$key], 0666);
             }
-
-            Log::info('Full pipeline completed', $result);
-            return $result;
-
-        } catch (ProcessFailedException $e) {
-            $stderr = $process->getErrorOutput();
-            Log::error('Full pipeline failed', [
-                'stderr' => $stderr,
-                'stdout' => $process->getOutput(),
-            ]);
-            throw new \Exception("Full pipeline failed: " . ($stderr ?: $process->getOutput()));
         }
+
+        Log::info('[Pipeline] Full pipeline complete', $result);
+        return $result;
     }
 
     // =========================================================================
-    // CROSS-REFERENCE ONLY
+    // CROSS-REFERENCE ONLY — cross_reference.py
     // =========================================================================
 
     public function crossReferenceOnly(string $cleanedFile, array $referenceFiles, array $options = []): array
     {
-        $pythonMainFile       = $this->toDockerPath($cleanedFile);
-        $pythonReferenceFiles = array_map(fn($f) => $this->toDockerPath($f), $referenceFiles);
-
         $userId     = Auth::id() ?? 'shared';
         $resultsDir = $this->sharedDataPath . '/results/' . $userId;
+        $this->ensureDir($resultsDir);
 
-        $command = [
-            'docker', 'exec',
-            '-e', 'GEMINI_API_KEY=' . (env('GEMINI_API_KEY') ?? ''),  // ✅ FIX 2
-            '-e', 'PYTHONUNBUFFERED=1',
-            $this->containerName,
-            'python3', $this->workflowPath,
-            'cross-ref',
-            $pythonMainFile,
-            ...$pythonReferenceFiles,
-            '--output', $resultsDir,
-        ];
-
-        if (!empty($options['rules_file'])) {
-            $command[] = '--rules';
-            $command[] = $this->toDockerPath($options['rules_file']);
-        }
-        if (!empty($options['no_llm_enricher'])) {
-            $command[] = '--no-llm-enricher';
-        }
-
-        $process = new Process($command);
-        $process->setTimeout(3600);
-
-        try {
-            $process->mustRun();
-            return $this->parseJsonOutput($process->getOutput());
-        } catch (ProcessFailedException $e) {
-            throw new \Exception("Cross-reference failed: " . $process->getErrorOutput());
-        }
+        return $this->runCrossReference($cleanedFile, $referenceFiles, $resultsDir, $options);
     }
 
     // =========================================================================
@@ -258,75 +195,133 @@ class DataCleaningService
     }
 
     // =========================================================================
+    // INTERNAL: run cross_reference.py
+    // =========================================================================
+
+    protected function runCrossReference(
+        string $mainFile,
+        array  $referenceFiles,
+        string $outputDir,
+        array  $options = []
+    ): array {
+        $pythonMain = $this->toDockerPath($mainFile);
+        $pythonRefs = array_map(fn($f) => $this->toDockerPath($f), $referenceFiles);
+        $pythonOut  = $this->toDockerPath($outputDir);
+
+        $command = $this->baseDockerCommand(array_merge(
+            ['python3', '-u', $this->crossRefScript],
+            [$pythonMain],
+            $pythonRefs,
+            ['--output', $pythonOut]
+        ));
+
+        if (!empty($options['rules_file'])) {
+            $command[] = '--rules';
+            $command[] = $this->toDockerPath($options['rules_file']);
+        }
+        if (!empty($options['no_llm_enricher'])) {
+            $command[] = '--no-llm-enricher';
+        }
+
+        Log::info('[CrossRef] Running', ['main' => $pythonMain, 'refs' => $pythonRefs]);
+
+        $process = new Process($command);
+        $process->setTimeout(3600);
+
+        try {
+            $process->mustRun();
+            $result = $this->parseJsonOutput($process->getOutput());
+            Log::info('[CrossRef] Done', $result);
+            return $result;
+        } catch (ProcessFailedException $e) {
+            $err = $process->getErrorOutput() ?: $process->getOutput();
+            Log::error('[CrossRef] Failed', ['error' => $err]);
+            throw new \Exception("Cross-reference failed: " . $err);
+        }
+    }
+
+    // =========================================================================
     // HELPERS
     // =========================================================================
 
     /**
-     * ✅ FIX 3 : Parser robuste — cherche le JSON depuis la fin du stdout.
-     * workflow.py et data_cleaner.py écrivent leurs logs sur stderr,
-     * et le JSON de résultat sur stdout (dernière ligne).
+     * Build the base docker exec command with env vars injected.
      */
-    private function parseJsonOutput(string $stdout): array
+    protected function baseDockerCommand(array $pythonCommand): array
     {
-        $lines = array_filter(
-            array_map('trim', explode("\n", $stdout)),
-            fn($l) => !empty($l)
-        );
+        return array_merge([
+            'docker', 'exec',
+            '-e', 'GEMINI_API_KEY=' . (env('GEMINI_API_KEY') ?? ''),
+            '-e', 'PYTHONUNBUFFERED=1',
+            $this->containerName,
+        ], $pythonCommand);
+    }
 
-        // Parcourir depuis la fin → trouver le premier JSON valide
+    /**
+     * Resolve a storage-relative or absolute path to a real filesystem path.
+     */
+    protected function resolvePath(string $pathOrStorage): string
+    {
+        if (file_exists($pathOrStorage)) {
+            return $pathOrStorage;
+        }
+        $disk = Storage::disk('local');
+        if (!$disk->exists($pathOrStorage)) {
+            throw new \Exception("File not found: {$pathOrStorage}");
+        }
+        return $disk->path($pathOrStorage);
+    }
+
+    /**
+     * Convert a host path to its Docker container equivalent (/shared_data/...).
+     */
+    protected function toDockerPath(string $path): string
+    {
+        if (str_starts_with($path, '/shared_data')) {
+            return $path;
+        }
+        return str_replace(
+            [storage_path('app/shared_data'), '/app/storage/app/shared_data'],
+            $this->sharedDataPath,
+            $path
+        );
+    }
+
+    /**
+     * Parse JSON from Python stdout — searches from end of output for robustness.
+     */
+    protected function parseJsonOutput(string $stdout): array
+    {
+        $lines = array_filter(array_map('trim', explode("\n", $stdout)));
+
         foreach (array_reverse($lines) as $line) {
             $decoded = json_decode($line, true);
             if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                Log::info('Parsed JSON output', $decoded);
                 return $decoded;
             }
         }
 
-        // Fallback regex : bloc JSON le plus complet
-        if (preg_match('/(\{(?:[^{}]|(?R))*\})/s', $stdout, $matches)) {
-            $decoded = json_decode($matches[1], true);
+        // Regex fallback for multi-line JSON
+        if (preg_match('/(\{(?:[^{}]|(?R))*\})/s', $stdout, $m)) {
+            $decoded = json_decode($m[1], true);
             if (json_last_error() === JSON_ERROR_NONE) {
                 return $decoded;
             }
         }
 
-        // Fallback texte : si le process a quand même réussi
-        if (
-            str_contains($stdout, 'Sanitize done') ||
-            str_contains($stdout, 'DONE') ||
-            str_contains($stdout, 'TERMINATED') ||
-            str_contains($stdout, 'success')
-        ) {
-            return [
-                'status'  => 'success',
-                'message' => 'Processing completed (text output parsed)',
-                'rows'    => 0,
-                'columns' => 0,
-            ];
+        // Text fallback
+        if (preg_match('/(success|Sanitize done|PIPELINE TERMINE)/i', $stdout)) {
+            return ['status' => 'success', 'message' => 'Processing completed', 'rows' => 0, 'columns' => 0];
         }
 
-        throw new \Exception(
-            "Could not parse Python output. STDOUT: " . substr($stdout, 0, 500)
-        );
+        throw new \Exception("Could not parse Python output: " . substr($stdout, 0, 500));
     }
 
-    /**
-     * Convertit un chemin Laravel/host en chemin Docker (/shared_data/...)
-     */
-    private function toDockerPath(string $laravelPath): string
+    protected function ensureDir(string $path): void
     {
-        if (str_starts_with($laravelPath, '/shared_data')) {
-            return $laravelPath;
+        if (!is_dir($path)) {
+            mkdir($path, 0777, true);
         }
-
-        return str_replace(
-            [
-                storage_path('app/shared_data'),
-                '/app/storage/app/shared_data',
-            ],
-            $this->sharedDataPath,
-            $laravelPath
-        );
     }
 
     public function getSupportedFormats(): array
@@ -336,7 +331,10 @@ class DataCleaningService
 
     public function isFormatSupported(string $filename): bool
     {
-        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-        return in_array($extension, $this->getSupportedFormats(), true);
+        return in_array(
+            strtolower(pathinfo($filename, PATHINFO_EXTENSION)),
+            $this->getSupportedFormats(),
+            true
+        );
     }
 }
