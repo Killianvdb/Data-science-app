@@ -55,21 +55,23 @@ services:
       postgres:
         condition: service_healthy
     command: >
-      sh -c "
-        echo '🔗 Creating storage symlink...' &&
-        rm -rf public/storage &&
-        php artisan storage:link || true &&
-        if [ -z \"$$APP_KEY\" ] || [ \"$$APP_KEY\" = \"base64:\" ]; then
-          echo '🔑 Generating APP_KEY...';
-          php artisan key:generate --force --no-interaction;
-        fi &&
-        echo '📦 Running migrations...' &&
-        php artisan migrate --force --no-interaction &&
-        echo '🌱 Seeding database...' &&
-        php artisan db:seed --force --no-interaction &&
-        echo '🚀 Starting Laravel...' &&
-        php artisan serve --host=0.0.0.0 --port=8000
-      "
+          sh -c "
+            echo '🔗 Creating storage symlink...' &&
+            rm -rf public/storage &&
+            php artisan storage:link || true &&
+            if [ -z \"$$APP_KEY\" ] || [ \"$$APP_KEY\" = \"base64:\" ]; then
+              echo '🔑 Generating APP_KEY...';
+              php artisan key:generate --force --no-interaction;
+            fi &&
+            echo '📦 Running migrations...' &&
+            php artisan migrate --force --no-interaction &&
+            echo '🌱 Seeding database...' &&
+            php artisan db:seed --force --no-interaction &&
+            echo '⚙️ Starting queue worker...' &&
+            php artisan queue:work --queue=default --sleep=1 --tries=1 &
+            echo '🚀 Starting Laravel...' &&
+            php artisan serve --host=0.0.0.0 --port=8000
+          "
 
   python:
     build:

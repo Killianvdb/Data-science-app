@@ -770,9 +770,52 @@ function startPolling(jobId) {
     var progressPct   = document.getElementById('progressPct');
 
     progressWrap.style.display = 'block';
-    progressFill.style.width   = '5%';
-    progressLabel.textContent  = 'Starting…';
-    progressPct.textContent    = '5%';
+
+    // Animate through steps visually even if job finishes fast
+    var startTime = Date.now();
+    var MIN_DISPLAY_MS = 2800; // always show progress for at least this long
+
+    var FAKE_STEPS = [
+        { pct: 10, label: 'Saving files…'                },
+        { pct: 30, label: 'Cleaning & standardising…'    },
+        { pct: 55, label: 'Validating data…'             },
+        { pct: 75, label: 'AI enrichment…'               },
+        { pct: 88, label: 'Generating PDF report…'       },
+    ];
+    var fakeIdx = 0;
+
+    // Animate fake steps every 500ms
+    var animInterval = setInterval(function() {
+        if (fakeIdx < FAKE_STEPS.length) {
+            var step = FAKE_STEPS[fakeIdx++];
+            progressFill.style.width  = step.pct + '%';
+            progressPct.textContent   = step.pct + '%';
+            progressLabel.textContent = step.label;
+        }
+    }, 500);
+
+    var pendingResult = null;
+    var pendingError  = null;
+
+    function finish() {
+        clearInterval(animInterval);
+        clearInterval(pollInterval);
+
+        // Snap to 100%
+        progressFill.style.width  = '100%';
+        progressPct.textContent   = '100%';
+        progressLabel.textContent = 'Complete';
+
+        setTimeout(function() {
+            progressWrap.style.display = 'none';
+            if (pendingError) {
+                showError(pendingError);
+            } else {
+                showResults(pendingResult);
+            }
+            resetSubmitBtn();
+        }, 400);
+    }
 
     pollInterval = setInterval(function() {
         fetch('{{ url("datasets/jobs") }}/' + jobId + '/status', {
@@ -780,24 +823,22 @@ function startPolling(jobId) {
         })
         .then(function(r){ return r.json(); })
         .then(function(j){
-            progressFill.style.width  = j.pct + '%';
-            progressPct.textContent   = j.pct + '%';
-            progressLabel.textContent = j.step_label || 'Processing…';
-
             if (j.status === 'done') {
+                pendingResult = j.result;
+                var elapsed = Date.now() - startTime;
+                var wait = Math.max(0, MIN_DISPLAY_MS - elapsed);
+                setTimeout(finish, wait);
                 clearInterval(pollInterval);
-                progressWrap.style.display = 'none';
-                showResults(j.result);
-                resetSubmitBtn();
             } else if (j.status === 'failed') {
+                pendingError = j.error || 'Pipeline failed.';
+                var elapsed = Date.now() - startTime;
+                var wait = Math.max(0, MIN_DISPLAY_MS - elapsed);
+                setTimeout(finish, wait);
                 clearInterval(pollInterval);
-                progressWrap.style.display = 'none';
-                showError(j.error || 'Pipeline failed.');
-                resetSubmitBtn();
             }
         })
         .catch(function(){ /* keep polling silently on network glitch */ });
-    }, 2000);
+    }, 1000);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
