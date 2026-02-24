@@ -65,17 +65,24 @@ class GeminiLLM:
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0}
         }).encode()
-        try:
-            req = urllib.request.Request(
-                self.API_URL + "?key=" + self._api_key,
-                data=payload, headers={"Content-Type": "application/json"}, method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=60) as r:
-                resp = _j.loads(r.read())
-            return resp["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception as e:
-            _safe_stderr(f"WARNING: Gemini API error: {e}")
-            return None
+        import time
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(
+                    self.API_URL + "?key=" + self._api_key,
+                    data=payload, headers={"Content-Type": "application/json"}, method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    resp = _j.loads(r.read())
+                return resp["candidates"][0]["content"]["parts"][0]["text"]
+            except Exception as e:
+                if '429' in str(e) and attempt < 2:
+                    wait = 30 * (attempt + 1)
+                    _safe_stderr(f"WARNING: Gemini rate limit (429), retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    _safe_stderr(f"WARNING: Gemini API error: {e}")
+                    return None
 
 
 def _safe_stderr(*args, **kwargs):
@@ -95,16 +102,50 @@ def _safe_stderr(*args, **kwargs):
 
 def is_date_column_heuristic(series: pd.Series) -> bool:
     """Détection heuristique basique (fallback si LLM indisponible)"""
-    date_keywords = ['date', 'day', 'time', 'birthday', 'timestamp', 'created', 'updated', 'birth']
+
+    # Les colonnes numériques ne sont JAMAIS des dates
+    if pd.api.types.is_numeric_dtype(series):
+        return False
+
+    # Seulement les colonnes string/object peuvent être des dates
+    if series.dtype not in ['object'] and str(series.dtype) != 'str':
+        return False
+
     col_name_lower = series.name.lower() if series.name else ''
 
-    if any(keyword in col_name_lower for keyword in date_keywords):
-        return True
+    # Mots-clés exacts — éviter les faux positifs comme "downtime", "overtime",
+    # "Average Collection Days", "Payment Days Outstanding"
+    # On vérifie que le mot-clé est un mot complet (entouré de séparateurs)
+    import re as _re
+    DATE_EXACT_KEYWORDS = ['date', 'timestamp', 'birthday', 'birth_date',
+                           'created_at', 'updated_at', 'created_on', 'updated_on',
+                           'signup_date', 'start_date', 'end_date', 'due_date',
+                           'order_date', 'invoice_date', 'delivery_date']
 
-    if series.dtype == 'object':
+    # Correspondance exacte sur le nom de colonne
+    if any(kw == col_name_lower or col_name_lower.endswith('_' + kw) or
+           col_name_lower.startswith(kw + '_') or ('_' + kw + '_') in col_name_lower
+           for kw in ['date', 'timestamp', 'birthday']):
+        # Vérifier que les valeurs ressemblent vraiment à des dates
+        sample = series.dropna().head(20).astype(str)
+        if sample.str.contains(r'\d{1,4}[/\-]\d{1,2}[/\-]\d{2,4}', regex=True).any():
+            return True
+        if sample.str.contains(r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b',
+                               case=False, regex=True).any():
+            return True
+        return False
+
+    # Sinon : détecter uniquement par le contenu des valeurs (pas par le nom)
+    if series.dtype == 'object' or str(series.dtype) == 'str':
         sample = series.dropna().head(100).astype(str)
         if len(sample) == 0:
             return False
+
+        # Vérifier que les valeurs ne sont pas juste des nombres
+        numeric_ratio = pd.to_numeric(sample, errors='coerce').notna().sum() / len(sample)
+        if numeric_ratio > 0.5:
+            return False  # Colonne numérique stockée en string
+
         date_pattern_count = sample.str.contains(
             r'\d{1,4}[/\-]\d{1,2}[/\-]\d{2,4}', regex=True
         ).sum()

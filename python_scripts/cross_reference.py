@@ -20,8 +20,17 @@ import csv
 import argparse
 import pandas as pd
 import numpy as np
+import re
 import warnings
 warnings.filterwarnings('ignore')
+
+# date_utils optionnel
+DATE_UTILS_AVAILABLE = False
+try:
+    from date_utils import is_date_column, parse_date_column
+    DATE_UTILS_AVAILABLE = True
+except ImportError:
+    pass
 
 # ============================================================================
 # GEMINI LLM CLIENT (remplace Gemini)
@@ -67,17 +76,24 @@ class GeminiLLM:
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0}
         }).encode()
-        try:
-            req = urllib.request.Request(
-                self.API_URL + "?key=" + self._api_key,
-                data=payload, headers={"Content-Type": "application/json"}, method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=60) as r:
-                resp = _j.loads(r.read())
-            return resp["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception as e:
-            _safe_stderr(f"WARNING: Gemini API error: {e}")
-            return None
+        import time
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(
+                    self.API_URL + "?key=" + self._api_key,
+                    data=payload, headers={"Content-Type": "application/json"}, method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    resp = _j.loads(r.read())
+                return resp["candidates"][0]["content"]["parts"][0]["text"]
+            except Exception as e:
+                if '429' in str(e) and attempt < 2:
+                    wait = 30 * (attempt + 1)
+                    _safe_stderr(f"WARNING: Gemini rate limit (429), retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    _safe_stderr(f"WARNING: Gemini API error: {e}")
+                    return None
 
 
 def _safe_stderr(*args, **kwargs):
@@ -844,7 +860,7 @@ class CrossReferencePipeline:
     def __init__(self, llm, rules_path=None, use_llm_enricher=True):
         self.llm              = llm
         self.cross_ref_engine = CrossReferenceEngine(llm)
-        self.validator        = Validator(llm, rules_path)
+        self.validator        = ContextAwareValidator(llm, rules_path)
         self.derived_recalc   = DerivedColumnsRecalculator(llm)
         self.llm_enricher     = LLMEnricher(llm) if use_llm_enricher else None
         self.imputer          = Imputer()
@@ -857,7 +873,7 @@ class CrossReferencePipeline:
             _safe_stderr(f"📚 Refs: {[os.path.basename(r) for r in ref_files]}")
         _safe_stderr(f"{'='*60}")
 
-        # Chargement avec normalisation des dates intégrée
+        # Chargement
         df = load_csv(main_file, llm=self.llm)
         if df is None:
             return None
@@ -872,7 +888,7 @@ class CrossReferencePipeline:
 
         # 1. Cross Reference
         if ref_files:
-            _safe_stderr(f"\n{'─'*40}\n1️⃣  CROSS REFERENCE\n{'─'*40}")
+            _safe_stderr(f"\n{'─'*40}\n1  CROSS REFERENCE\n{'─'*40}")
             for ref_file in ref_files:
                 df_ref = load_csv(ref_file, llm=self.llm)
                 if df_ref is None:
@@ -880,40 +896,42 @@ class CrossReferencePipeline:
                 df, ref_r = self.cross_ref_engine.enrich(df, df_ref, os.path.basename(ref_file))
                 rapport["cross_reference"].append(ref_r)
         else:
-            _safe_stderr(f"\n   ℹ️  Mode simple (pas de références)")
+            _safe_stderr(f"\n   Mode simple (pas de references)")
 
         # 2. Validation
-        _safe_stderr(f"\n{'─'*40}\n2️⃣  VALIDATION MÉTIER\n{'─'*40}")
+        _safe_stderr(f"\n{'─'*40}\n2  VALIDATION\n{'─'*40}")
         df, val_r = self.validator.validate(df, filename=os.path.basename(main_file))
         rapport["validation"] = val_r
 
         # 3. Recalcul colonnes dérivées
-        _safe_stderr(f"\n{'─'*40}\n3️⃣  RECALCUL COLONNES DÉRIVÉES\n{'─'*40}")
+        _safe_stderr(f"\n{'─'*40}\n3  RECALCUL COLONNES DERIVEES\n{'─'*40}")
         df, der_r = self.derived_recalc.recalculate(df)
         rapport["derived_columns"] = der_r
 
         # 4. LLM Enricher
         if self.llm_enricher and self.llm.available:
-            _safe_stderr(f"\n{'─'*40}\n4️⃣  LLM ENRICHER\n{'─'*40}")
+            _safe_stderr(f"\n{'─'*40}\n4  LLM ENRICHER\n{'─'*40}")
             df, enr_r = self.llm_enricher.enrich(
                 df, ref_columns=self.cross_ref_engine.ref_columns
             )
             rapport["enrichment"] = enr_r
 
         # 5. Imputation finale
-        _safe_stderr(f"\n{'─'*40}\n5️⃣  IMPUTATION FINALE\n{'─'*40}")
+        _safe_stderr(f"\n{'─'*40}\n5  IMPUTATION FINALE\n{'─'*40}")
         df = self.imputer.impute(df)
 
         # 6. Export
-        _safe_stderr(f"\n{'─'*40}\n6️⃣  EXPORT\n{'─'*40}")
+        _safe_stderr(f"\n{'─'*40}\n6  EXPORT\n{'─'*40}")
         rapport.update({"final_rows": len(df), "final_cols": len(df.columns),
                          "null_remaining": int(df.isna().sum().sum())})
         out_csv, out_json = export_results(df, main_file, output_dir, rapport)
 
         _safe_stderr(f"\n{'='*60}")
-        _safe_stderr(f"✅ PIPELINE TERMINÉ")
-        _safe_stderr(f"   Lignes  : {rapport['initial_rows']} → {rapport['final_rows']}")
-        _safe_stderr(f"   Colonnes: {rapport['initial_cols']} → {rapport['final_cols']}")
+        _safe_stderr(f"PIPELINE TERMINE")
+        _safe_stderr(f"   Lignes  : {rapport['initial_rows']} -> {rapport['final_rows']}")
+        if rapport.get('dedup_after_merge', 0) > 0:
+            _safe_stderr(f"   Doublons supprimes apres merge: {rapport['dedup_after_merge']}")
+        _safe_stderr(f"   Colonnes: {rapport['initial_cols']} -> {rapport['final_cols']}")
         _safe_stderr(f"   NULL restants: {rapport['null_remaining']}")
         _safe_stderr(f"{'='*60}")
 

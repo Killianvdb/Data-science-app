@@ -37,14 +37,20 @@
 
                 <div class="flex gap-2 mt-2 sm:mt-0">
                     <button @click="roleFilter=''; page = 1; fetchUsers()"
-                        :class="roleFilter===''?'bg-blue-500 text-white':'bg-gray-200 text-gray-800'"
-                        class="px-3 py-1 rounded">All</button>
+                        :class="roleFilter==='' ? 'bg-indigo-600 text-white'
+                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'"
+                        class="inline-block px-4 py-2 rounded transition">
+                        All</button>
                     <button @click="roleFilter='admin'; page = 1; fetchUsers()"
-                        :class="roleFilter==='admin'?'bg-blue-500 text-white':'bg-gray-200 text-gray-800'"
-                        class="px-3 py-1 rounded">Admins</button>
+                        :class="roleFilter==='admin' ? 'bg-indigo-600 text-white'
+                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'"
+                        class="inline-block px-4 py-2 rounded transition">
+                        Admins</button>
                     <button @click="roleFilter='user'; page = 1; fetchUsers()"
-                        :class="roleFilter==='user'?'bg-blue-500 text-white':'bg-gray-200 text-gray-800'"
-                        class="px-3 py-1 rounded">Users</button>
+                        :class="roleFilter==='user' ? 'bg-indigo-600 text-white'
+                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'"
+                        class="inline-block px-4 py-2 rounded transition">
+                        Users</button>
                 </div>
             </div>
 
