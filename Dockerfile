@@ -1,5 +1,10 @@
 FROM php:8.2-fpm
 
+RUN echo "upload_max_filesize = 100M" > /usr/local/etc/php/conf.d/uploads.ini && \
+    echo "post_max_size = 100M" >> /usr/local/etc/php/conf.d/uploads.ini && \
+    echo "max_execution_time = 600" >> /usr/local/etc/php/conf.d/uploads.ini && \
+    echo "memory_limit = 512M" >> /usr/local/etc/php/conf.d/uploads.ini
+
 # 1. Install system dependencies + Node.js
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -36,6 +41,8 @@ COPY composer.json composer.lock ./
 
 # 6. Install PHP dependencies
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+
+
 
 # 7. Copy package.json for Node dependencies
 COPY package*.json ./

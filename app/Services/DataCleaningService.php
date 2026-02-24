@@ -9,12 +9,12 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * DataCleaningService v5.0
+ * DataCleaningService v3.1
  * ========================
- * Pipeline 4 étapes :
- *   1. data_cleaner.py  sur chaque fichier individuellement
- *   2. cross_reference.py  sur les fichiers nettoyés (merge + validate + enrich)
- *   3. data_cleaner.py  sur le fichier fusionné (re-nettoyage final)
+ * Pipeline order (correct) :
+ *   1. cross_reference.py  — merge all files + dedup on full dataset + validate + enrich
+ *   2. data_cleaner.py     — sanitize (dates, prices, negatives) on merged+deduped data
+ *   3. report_generator.py — render _REPORT.json into a PDF (called from controller)
  *
  * Pourquoi 3 passes ?
  *   - Pass 1 : nettoie les erreurs internes à chaque fichier
@@ -23,10 +23,11 @@ use Illuminate\Support\Facades\Auth;
  */
 class DataCleaningService
 {
-    protected string $containerName  = 'datasci-python';
-    protected string $sharedDataPath = '/shared_data';
-    protected string $cleanerScript  = '/app/data_cleaner.py';
-    protected string $crossRefScript = '/app/cross_reference.py';
+    protected string $containerName   = 'datasci-python';
+    protected string $sharedDataPath  = '/shared_data';
+    protected string $cleanerScript   = '/app/data_cleaner.py';
+    protected string $crossRefScript  = '/app/cross_reference.py';
+    protected string $reportGenScript = '/app/report_generator.py';
 
     // =========================================================================
     // ENTRY POINT: clean a single uploaded file (no cross-ref needed)
@@ -59,7 +60,18 @@ class DataCleaningService
             $pythonOutput,
         ]);
 
-        Log::info('[DataCleaner] Running', ['input' => $pythonInput]);
+        // Pass options JSON as 3rd positional arg (use_llm + column_types)
+        $optionsJson = json_encode([
+            'use_llm'      => true,
+            'column_types' => $options['column_types'] ?? [],
+        ]);
+        $command[] = $optionsJson;
+
+        Log::info('[DataCleaner] Running', [
+            'input'        => $pythonInput,
+            'output'       => $pythonOutput,
+            'column_types' => $options['column_types'] ?? [],
+        ]);
 
         $process = new Process($command);
         $process->setTimeout(3600);
@@ -92,33 +104,43 @@ class DataCleaningService
 
     public function runFullPipeline(string $mainFile, array $referenceFiles = [], array $options = []): array
     {
-        $userId    = Auth::id() ?? 'shared';
-        $pass1Dir  = $this->sharedDataPath . '/cleaned/'  . $userId;   // après pass 1
-        $crossDir  = $this->sharedDataPath . '/merged/'   . $userId;   // après cross-ref
-        $finalDir  = $this->sharedDataPath . '/results/'  . $userId;   // après pass 2
-        foreach ([$pass1Dir, $crossDir, $finalDir] as $dir) {
-            $this->ensureDir($dir);
-        }
+        $userId     = Auth::id() ?? 'shared';
+        $mergedDir  = $this->sharedDataPath . '/merged/'  . $userId;
+        $cleanedDir = $this->sharedDataPath . '/cleaned/' . $userId;
+        $resultsDir = $this->sharedDataPath . '/results/' . $userId;
+        $this->ensureDir($mergedDir);
+        $this->ensureDir($cleanedDir);
+        $this->ensureDir($resultsDir);
 
         // ── PASS 1 : clean each file individually ────────────────────────────
         Log::info('[Pipeline] Pass 1 — clean individual files');
 
-        $mainPass1 = $this->cleanFile($mainFile, $pass1Dir, $options);
-        $mainPass1Path = $mainPass1['cleaned_file_path']
-            ?? ($pass1Dir . '/' . pathinfo($mainFile, PATHINFO_FILENAME) . '_CLEANED.csv');
+        // ── STEP 1: cross_reference.py ───────────────────────────────────────
+        Log::info('[Pipeline] Step 1: cross_reference.py', [
+            'main' => $mainFile,
+            'refs' => $referenceFiles,
+        ]);
 
-        $refPass1Paths = [];
-        foreach ($referenceFiles as $refFile) {
-            $refCleaned      = $this->cleanFile($refFile, $pass1Dir, $options);
-            $refPass1Paths[] = $refCleaned['cleaned_file_path']
-                ?? ($pass1Dir . '/' . pathinfo($refFile, PATHINFO_FILENAME) . '_CLEANED.csv');
+        $crossRefResult = $this->runCrossReference(
+            $mainFile, $referenceFiles, $mergedDir, $options
+        );
+
+        $mergedFile = $crossRefResult['output_csv']
+            ?? ($mergedDir . '/' . $basename . '_CLEANED_ENRICHED.csv');
+
+        if (!file_exists($mergedFile)) {
+            $candidates = glob($mergedDir . '/*ENRICHED*.csv') ?: glob($mergedDir . '/*.csv');
+            if (!empty($candidates)) {
+                $mergedFile = $candidates[0];
+            } else {
+                $mergedFile = $mainFile;
+            }
         }
 
-        // ── PASS 2 : cross-reference on cleaned files ────────────────────────
-        Log::info('[Pipeline] Pass 2 — cross-reference', [
-            'main' => $mainPass1Path,
-            'refs' => $refPass1Paths,
-        ]);
+        // ── STEP 2: data_cleaner.py ──────────────────────────────────────────
+        Log::info('[Pipeline] Step 2: data_cleaner.py', ['input' => $mergedFile]);
+
+        $cleanResult = $this->cleanFile($mergedFile, $cleanedDir, $options);
 
         $crossResult    = $this->runCrossReference($mainPass1Path, $refPass1Paths, $crossDir, $options);
         $mergedFilePath = $crossResult['output_csv'] ?? null;
@@ -141,19 +163,19 @@ class DataCleaningService
         // ── Build result ─────────────────────────────────────────────────────
         $result = [
             'status'            => 'success',
-            'pass1_cleaned'     => $mainPass1,
-            'pass2_cross_ref'   => $crossResult,
-            'pass3_final'       => $finalResult,
-            'cleaned_file_path' => $mainPass1Path,    // fichier nettoyé seul (pass 1)
-            'enriched_file'     => $mergedFilePath,   // fichier mergé (pass 2)
-            'final_file'        => $finalPath,        // fichier final re-nettoyé (pass 3)
-            'report_file'       => $crossResult['output_report'] ?? null,
-            'final_rows'        => $finalResult['rows']            ?? ($crossResult['final_rows']    ?? 0),
-            'final_cols'        => $finalResult['columns']         ?? ($crossResult['final_cols']    ?? 0),
-            'null_remaining'    => $finalResult['null_remaining']  ?? ($crossResult['null_remaining'] ?? 0),
+            'step1_cross_ref'   => $crossRefResult,
+            'step2_cleaned'     => $cleanResult,
+            'merged_file'       => $mergedFile,
+            'cleaned_file_path' => file_exists($cleanedFile) ? $cleanedFile : ($cleanResult['output_file'] ?? null),
+            'report_file'       => $crossRefResult['output_report'] ?? null,
+            'initial_rows'      => $crossRefResult['final_rows']    ?? 0,
+            'final_rows'        => $cleanResult['rows']             ?? 0,
+            'final_cols'        => $cleanResult['columns']          ?? 0,
+            'null_remaining'    => $cleanResult['null_remaining']   ?? 0,
+            'dedup_after_merge' => $crossRefResult['rapport']['dedup_after_merge'] ?? 0,
         ];
 
-        foreach (['cleaned_file_path', 'enriched_file', 'final_file', 'report_file'] as $key) {
+        foreach (['cleaned_file_path', 'merged_file', 'report_file'] as $key) {
             if (!empty($result[$key]) && file_exists($result[$key])) {
                 @chmod($result[$key], 0666);
             }
@@ -195,6 +217,76 @@ class DataCleaningService
             }
         }
         return $results;
+    }
+
+    // =========================================================================
+    // PDF REPORT GENERATION — report_generator.py
+    // =========================================================================
+
+    /**
+     * Generate a PDF report from the _REPORT.json produced by cross_reference.py.
+     *
+     * Derives the PDF path from the JSON path (foo_REPORT.json -> foo_REPORT.pdf)
+     * and places it in /shared_data/results/{userId}/.
+     *
+     * Called from DatasetController::upload() after runFullPipeline().
+     * The controller wraps the call in try/catch — a PDF failure never breaks
+     * the overall request; the CSV and JSON files are always returned regardless.
+     *
+     * @param  string $reportJsonPath  Absolute host path to the _REPORT.json file
+     * @param  int    $userId          Authenticated user ID
+     * @return string                  Absolute host path to the generated PDF
+     * @throws \Exception              On Docker exec failure or missing output file
+     */
+    public function generatePdfReport(string $reportJsonPath, int $userId): string
+    {
+        $resultsDir = $this->sharedDataPath . '/results/' . $userId;
+        $this->ensureDir($resultsDir);
+
+        // foo_REPORT.json -> foo_REPORT.pdf, always placed in the results dir
+        $pdfFilename = preg_replace('/\.json$/i', '.pdf', basename($reportJsonPath));
+        $pdfPath     = $resultsDir . '/' . $pdfFilename;
+
+        $pythonJson = $this->toDockerPath($reportJsonPath);
+        $pythonPdf  = $this->toDockerPath($pdfPath);
+
+        $command = $this->baseDockerCommand([
+            'python3', '-u', $this->reportGenScript,
+            $pythonJson,
+            $pythonPdf,
+        ]);
+
+        Log::info('[PdfReport] Generating', [
+            'json' => $pythonJson,
+            'pdf'  => $pythonPdf,
+        ]);
+
+        $process = new Process($command);
+        $process->setTimeout(120);
+
+        try {
+            $process->mustRun();
+            $result = $this->parseJsonOutput($process->getOutput());
+
+            if (($result['status'] ?? '') !== 'success' || !file_exists($pdfPath)) {
+                throw new \Exception(
+                    'report_generator.py did not produce a PDF: '
+                    . ($result['message'] ?? 'unknown error')
+                );
+            }
+
+            @chmod($pdfPath, 0666);
+            Log::info('[PdfReport] Done', [
+                'path'  => $pdfPath,
+                'bytes' => $result['size_bytes'] ?? '?',
+            ]);
+            return $pdfPath;
+
+        } catch (ProcessFailedException $e) {
+            $err = $process->getErrorOutput() ?: $process->getOutput();
+            Log::error('[PdfReport] Failed', ['error' => $err]);
+            throw new \Exception('PDF report generation failed: ' . $err);
+        }
     }
 
     // =========================================================================

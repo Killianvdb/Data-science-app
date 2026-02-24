@@ -23,7 +23,7 @@ class VisualizationController extends Controller
     public function generate(Request $request)
     {
         $request->validate([
-            'dataset' => 'required|file|mimes:csv,xlsx,xls|max:20480',
+            'dataset' => 'required|file|mimes:csv,xlsx,xls|max:102400',
         ]);
 
         // 1) Save to the SHARED private folder
