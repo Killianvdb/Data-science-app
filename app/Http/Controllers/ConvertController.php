@@ -6,6 +6,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
+use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
+use OpenSpout\Writer\XLSX\Options as XlsxOptions;
+use OpenSpout\Common\Entity\Row;
+
 class ConvertController extends Controller
 {
     public function index()
