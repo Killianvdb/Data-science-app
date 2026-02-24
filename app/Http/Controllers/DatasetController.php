@@ -55,7 +55,7 @@ class DatasetController extends Controller
     {
         $filename = basename($rawFilename);
 
-        if (!preg_match('/^[\w\-. ]+\.(csv|json|pdf)$/i', $filename)) {
+        if (!preg_match('/^[\w\-. ]+\.(csv|json|pdf|txt|xlsx|xls|xml)$/i', $filename)) {
             Log::warning('Download rejected: invalid filename pattern', [
                 'raw'     => $rawFilename,
                 'cleaned' => $filename,
