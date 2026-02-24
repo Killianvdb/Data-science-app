@@ -37,6 +37,10 @@
                             {{ __('Data AI Assistant') }}
                         </x-nav-link>
 
+                        <x-nav-link :href="route('convert.index')" :active="request()->routeIs('convert.index')">
+                            {{ __('Convert Data') }}
+                        </x-nav-link>
+
                         @if(auth()->check() && auth()->user()->role === 'admin')
                             <x-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.index')">
                                 {{ __('Admin Panel') }}
