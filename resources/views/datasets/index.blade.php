@@ -203,6 +203,50 @@
 /* ── Field label/hint ── */
 .fl { font-size: 13px; font-weight: 600; color: #2d2d2d; margin: 0 0 3px; display: block; }
 .fh { font-size: 12px; color: #aaa; margin: 0 0 8px; line-height: 1.5; }
+
+/* ── File preview ── */
+.preview-card { animation: fadeSlide .25s ease; }
+@keyframes fadeSlide { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+.preview-table-wrap { overflow-x:auto; border-radius:10px; border:1.5px solid #e8edf2; }
+.preview-table { width:100%; border-collapse:collapse; font-size:12px; }
+.preview-table th {
+    background:#f8fafc; padding:8px 12px; text-align:left;
+    font-weight:600; color:#334155; font-size:11px;
+    border-bottom:1.5px solid #e2e8f0; white-space:nowrap;
+}
+.preview-table td {
+    padding:7px 12px; color:#475569; border-bottom:1px solid #f1f5f9;
+    max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.preview-table tr:last-child td { border-bottom:none; }
+.preview-table tr:hover td { background:#f8fafc; }
+.type-select {
+    margin-top:4px; width:100%;
+    padding:4px 6px; border:1.5px solid #e2e8f0; border-radius:7px;
+    font-size:11px; color:#334155; background:#fff; cursor:pointer;
+    font-family:'Sora',sans-serif; outline:none;
+    transition:border-color .15s;
+}
+.type-select:focus { border-color:#2563eb; }
+.type-select.overridden { border-color:#2563eb; background:#eff6ff; color:#1e40af; font-weight:600; }
+
+/* ── Progress bar ── */
+.progress-wrap {
+    margin-top:12px; padding:20px 24px;
+    background:#fff; border:1.5px solid #e8edf2; border-radius:16px;
+    animation: fadeSlide .25s ease;
+}
+.progress-track {
+    height:8px; background:#f1f5f9; border-radius:8px; overflow:hidden; margin:10px 0 6px;
+}
+.progress-fill {
+    height:100%; border-radius:8px;
+    background:linear-gradient(90deg,#3b82f6,#2563eb);
+    transition:width .5s ease;
+}
+.progress-step-label { font-size:13px; font-weight:500; color:#334155; }
+.progress-pct-label  { font-size:12px; color:#94a3b8; float:right; margin-top:-20px; }
+
 </style>
 
 <div class="up">
@@ -262,6 +306,20 @@
 
             <div class="ref-chips" id="refChips"></div>
             <div id="refHidden"></div>
+        </div>
+
+        {{-- ── Preview card (shown after file selected) ── --}}
+        <div id="previewCard" class="card preview-card" style="display:none;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                <p class="sec-label" style="margin:0;">File preview</p>
+                <span style="font-size:11px;color:#94a3b8;">First 5 rows · set column types below headers</span>
+            </div>
+            <div class="preview-table-wrap">
+                <table class="preview-table" id="previewTable"></table>
+            </div>
+            <p style="font-size:11.5px;color:#94a3b8;margin:10px 0 0;">
+                ℹ️ Leave on <b>Auto-detect</b> unless the pipeline misidentifies a column type.
+            </p>
         </div>
 
         {{-- ── CARD 2: Pipeline mode selector ── --}}
@@ -401,6 +459,23 @@
         </div>
     </form>
 
+
+    {{-- Progress bar (shown while processing) --}}
+    <div id="progressWrap" class="progress-wrap" style="display:none;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <svg class="spin" width="14" height="14" fill="none" viewBox="0 0 24 24" style="flex-shrink:0;">
+                <circle style="opacity:.2" cx="12" cy="12" r="10" stroke="#2563eb" stroke-width="3.5"/>
+                <path style="opacity:.9" fill="#2563eb" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            <span class="progress-step-label" id="progressLabel">Starting…</span>
+        </div>
+        <div class="progress-track">
+            <div class="progress-fill" id="progressFill" style="width:5%"></div>
+        </div>
+        <span class="progress-pct-label" id="progressPct">5%</span>
+        <div style="clear:both;"></div>
+    </div>
+
     {{-- ── Results ── --}}
     <div id="resultsPanel" style="display:none;margin-top:12px;" class="card">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
@@ -424,13 +499,17 @@
 
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 (function(){
 'use strict';
 
-// ── Drop zone ──────────────────────────────────────────────────────────────────
-var dz   = document.getElementById('dropZone');
-var fi   = document.getElementById('fileInput');
+// ─────────────────────────────────────────────────────────────────────────────
+// DROP ZONE
+// ─────────────────────────────────────────────────────────────────────────────
+var dz    = document.getElementById('dropZone');
+var fi    = document.getElementById('fileInput');
 var dzDef = document.getElementById('dz-default');
 var dzSel = document.getElementById('dz-selected');
 var dzFn  = document.getElementById('dz-filename');
@@ -442,6 +521,7 @@ function showMainFile(f){
     dzDef.style.display='none'; dzSel.style.display='block';
     dzFn.textContent=f.name; dzFs.textContent=fmtBytes(f.size);
     dz.classList.add('has-file'); dz.classList.remove('dragover');
+    parseAndPreview(f);
 }
 
 fi.addEventListener('change', function(){ if(this.files[0]) showMainFile(this.files[0]); });
@@ -456,15 +536,129 @@ dz.addEventListener('drop', function(e){
 });
 dz.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fi.click(); }});
 
-// ── Reference files ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// FILE PREVIEW + COLUMN TYPE PICKER
+// ─────────────────────────────────────────────────────────────────────────────
+var columnTypes = {}; // {colName: typeString}
+
+var TYPE_OPTIONS = [
+    ['auto',       '🔍 Auto-detect'],
+    ['date',       '📅 Date'],
+    ['price',      '💰 Price / Currency'],
+    ['integer',    '🔢 Integer'],
+    ['text',       '💬 Text'],
+    ['identifier', '🔑 Identifier / ID'],
+];
+
+function parseAndPreview(file) {
+    var ext = file.name.split('.').pop().toLowerCase();
+    try {
+        if (ext === 'csv' || ext === 'txt') {
+            if (typeof Papa === 'undefined') {
+                console.warn('PapaParse not loaded yet'); return;
+            }
+            Papa.parse(file, {
+                preview: 6,
+                skipEmptyLines: true,
+                complete: function(res) { renderPreview(res.data); }
+            });
+        } else if (ext === 'xlsx' || ext === 'xls') {
+            if (typeof XLSX === 'undefined') {
+                console.warn('SheetJS not loaded yet'); return;
+            }
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    var wb   = XLSX.read(e.target.result, {type:'array'});
+                    var ws   = wb.Sheets[wb.SheetNames[0]];
+                    var data = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+                    renderPreview(data.slice(0, 6));
+                } catch(ex) { console.error('XLSX parse error', ex); }
+            };
+            reader.readAsArrayBuffer(file);
+        } else {
+            document.getElementById('previewCard').style.display = 'none';
+        }
+    } catch(ex) { console.error('parseAndPreview error', ex); }
+}
+
+function renderPreview(rows) {
+    if (!rows || rows.length < 2) {
+        document.getElementById('previewCard').style.display = 'none';
+        return;
+    }
+
+    var headers  = rows[0];
+    var dataRows = rows.slice(1);
+    columnTypes  = {};
+
+    var thead = '<thead><tr>';
+    headers.forEach(function(h) {
+        var col = String(h).trim();
+        var opts = TYPE_OPTIONS.map(function(o) {
+            return '<option value="'+o[0]+'">'+o[1]+'</option>';
+        }).join('');
+        thead += '<th>' +
+            '<div>'+escHtml(col)+'</div>' +
+            '<select class="type-select" data-col="'+escHtml(col)+'" onchange="onTypeChange(this)">' +
+            opts + '</select>' +
+            '</th>';
+    });
+    thead += '</tr></thead>';
+
+    var tbody = '<tbody>';
+    dataRows.forEach(function(row) {
+        tbody += '<tr>';
+        headers.forEach(function(_, i) {
+            var val = row[i] !== undefined ? String(row[i]) : '';
+            tbody += '<td title="'+escHtml(val)+'">'+escHtml(val.length > 22 ? val.slice(0,22)+'…' : val)+'</td>';
+        });
+        tbody += '</tr>';
+    });
+    tbody += '</tbody>';
+
+    document.getElementById('previewTable').innerHTML = thead + tbody;
+    document.getElementById('previewCard').style.display = 'block';
+}
+
+window.onTypeChange = function(sel) {
+    var col = sel.dataset.col;
+    columnTypes[col] = sel.value;
+    sel.classList.toggle('overridden', sel.value !== 'auto');
+};
+
+function escHtml(s) {
+    return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function buildColumnTypeInputs() {
+    // Append hidden inputs for column_types to the form before submit
+    document.querySelectorAll('.col-type-hidden').forEach(function(el){ el.remove(); });
+    Object.keys(columnTypes).forEach(function(col) {
+        var val = columnTypes[col];
+        if (val && val !== 'auto') {
+            var inp = document.createElement('input');
+            inp.type  = 'hidden';
+            inp.name  = 'column_types[' + col + ']';
+            inp.value = val;
+            inp.className = 'col-type-hidden';
+            document.getElementById('uploadForm').appendChild(inp);
+        }
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REFERENCE FILES
+// ─────────────────────────────────────────────────────────────────────────────
 var refPicker  = document.getElementById('refPicker');
 var refChips   = document.getElementById('refChips');
 var refHidden  = document.getElementById('refHidden');
-var refFiles   = []; // {name, file}
+var refFiles   = [];
 
 refPicker.addEventListener('change', function(){
     Array.from(this.files).forEach(function(f){
-        // avoid duplicates by name
         if(refFiles.some(function(r){ return r.name===f.name; })) return;
         refFiles.push({name: f.name, file: f});
         addRefChip(f.name);
@@ -475,8 +669,7 @@ refPicker.addEventListener('change', function(){
 
 function addRefChip(name){
     var chip = document.createElement('div');
-    chip.className = 'ref-chip';
-    chip.dataset.name = name;
+    chip.className = 'ref-chip'; chip.dataset.name = name;
     chip.innerHTML =
         '<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>' +
         '<span>' + name + '</span>' +
@@ -493,14 +686,9 @@ window.removeRef = function(btn, name){
 };
 
 function rebuildHiddenInputs(){
-    // We can't set files on hidden inputs programmatically in a cross-browser way,
-    // so we use a DataTransfer object on the actual refPicker to carry all files,
-    // and use a separate approach: clone the files into a fresh file input for each.
     refHidden.innerHTML='';
-    // Build a new multi-file picker carrying all selected files
     var dt = new DataTransfer();
     refFiles.forEach(function(r){ dt.items.add(r.file); });
-    // Create one file input that will carry all files
     var inp = document.createElement('input');
     inp.type='file'; inp.name='reference_files[]'; inp.multiple=true;
     inp.style.display='none';
@@ -508,57 +696,54 @@ function rebuildHiddenInputs(){
     refHidden.appendChild(inp);
 }
 
-// ── Pipeline mode toggle ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// PIPELINE MODE TOGGLE
+// ─────────────────────────────────────────────────────────────────────────────
 window.setMode = function(mode) {
     document.getElementById('pipelineMode').value = mode;
-
-    var btnClean = document.getElementById('btn-clean');
-    var btnFull  = document.getElementById('btn-full');
-    var iconClean = document.getElementById('icon-clean');
-    var iconFull  = document.getElementById('icon-full');
-    var refCard  = document.getElementById('refCard');
-
+    var btnClean  = document.getElementById('btn-clean');
+    var btnFull   = document.getElementById('btn-full');
+    var refCard   = document.getElementById('refCard');
     if (mode === 'full_pipeline') {
-        btnFull.classList.add('selected');
-        btnClean.classList.remove('selected');
-        iconFull.classList.add('active');
-        iconClean.classList.remove('active');
+        btnFull.classList.add('selected');   btnClean.classList.remove('selected');
+        document.getElementById('icon-full').classList.add('active');
+        document.getElementById('icon-clean').classList.remove('active');
         refCard.style.display = 'block';
     } else {
-        btnClean.classList.add('selected');
-        btnFull.classList.remove('selected');
-        iconClean.classList.add('active');
-        iconFull.classList.remove('active');
+        btnClean.classList.add('selected');  btnFull.classList.remove('selected');
+        document.getElementById('icon-clean').classList.add('active');
+        document.getElementById('icon-full').classList.remove('active');
         refCard.style.display = 'none';
-        // Clear ref files when switching back to clean only
         refFiles = [];
         document.getElementById('refChips').innerHTML = '';
         document.getElementById('refHidden').innerHTML = '';
     }
 };
-function updatePipelineMode() {} // kept for compat
+function updatePipelineMode(){}
 
-// ── Context toggle ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTEXT TOGGLE
+// ─────────────────────────────────────────────────────────────────────────────
 var ctxToggle = document.getElementById('ctxToggle');
 var ctxPanel  = document.getElementById('ctxPanel');
 var ctxArrow  = document.getElementById('ctxArrow');
 var ctxOpen   = false;
-
 ctxToggle.addEventListener('click', function(){
     ctxOpen = !ctxOpen;
     ctxPanel.style.display = ctxOpen ? 'block' : 'none';
     ctxArrow.classList.toggle('open', ctxOpen);
 });
 
-// ── Dynamic rows ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// DYNAMIC ROWS
+// ─────────────────────────────────────────────────────────────────────────────
 window.addTxtRow = function(cid, name, ph){
     var c=document.getElementById(cid), d=document.createElement('div');
     d.style.cssText='display:flex;gap:6px;align-items:center;';
-    d.innerHTML='<input type="text" name="'+name+'" placeholder="'+ph+'" maxlength="100" class="u-input">' +
+    d.innerHTML='<input type="text" name="'+name+'" placeholder="'+ph+'" maxlength="100" class="u-input">'+
         '<button type="button" class="rm-btn" onclick="this.closest(\'div\').remove()">×</button>';
     c.appendChild(d);
 };
-
 var ri=1;
 window.addRangeRow = function(){
     var i=ri++, c=document.getElementById('rangeCont'), d=document.createElement('div');
@@ -573,46 +758,105 @@ window.addRangeRow = function(){
     c.appendChild(d);
 };
 
-// ── Form submit ────────────────────────────────────────────────────────────────
-var form        = document.getElementById('uploadForm');
-var submitBtn   = document.getElementById('submitBtn');
-var submitLbl   = document.getElementById('submitLabel');
-var submitSpin  = document.getElementById('submitSpinner');
-var resPanel    = document.getElementById('resultsPanel');
-var resStats    = document.getElementById('resultStats');
-var dlButtons   = document.getElementById('dlButtons');
-var ctxNotice   = document.getElementById('ctxNotice');
-var errPanel    = document.getElementById('errorPanel');
-var errMsg      = document.getElementById('errorMsg');
+// ─────────────────────────────────────────────────────────────────────────────
+// PROGRESS BAR POLLING
+// ─────────────────────────────────────────────────────────────────────────────
+var pollInterval = null;
+
+function startPolling(jobId) {
+    var progressWrap  = document.getElementById('progressWrap');
+    var progressFill  = document.getElementById('progressFill');
+    var progressLabel = document.getElementById('progressLabel');
+    var progressPct   = document.getElementById('progressPct');
+
+    progressWrap.style.display = 'block';
+    progressFill.style.width   = '5%';
+    progressLabel.textContent  = 'Starting…';
+    progressPct.textContent    = '5%';
+
+    pollInterval = setInterval(function() {
+        fetch('{{ url("datasets/jobs") }}/' + jobId + '/status', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+            progressFill.style.width  = j.pct + '%';
+            progressPct.textContent   = j.pct + '%';
+            progressLabel.textContent = j.step_label || 'Processing…';
+
+            if (j.status === 'done') {
+                clearInterval(pollInterval);
+                progressWrap.style.display = 'none';
+                showResults(j.result);
+                resetSubmitBtn();
+            } else if (j.status === 'failed') {
+                clearInterval(pollInterval);
+                progressWrap.style.display = 'none';
+                showError(j.error || 'Pipeline failed.');
+                resetSubmitBtn();
+            }
+        })
+        .catch(function(){ /* keep polling silently on network glitch */ });
+    }, 2000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FORM SUBMIT
+// ─────────────────────────────────────────────────────────────────────────────
+var form       = document.getElementById('uploadForm');
+var submitBtn  = document.getElementById('submitBtn');
+var submitLbl  = document.getElementById('submitLabel');
+var submitSpin = document.getElementById('submitSpinner');
+var resPanel   = document.getElementById('resultsPanel');
+var resStats   = document.getElementById('resultStats');
+var dlButtons  = document.getElementById('dlButtons');
+var ctxNotice  = document.getElementById('ctxNotice');
+var errPanel   = document.getElementById('errorPanel');
+var errMsg     = document.getElementById('errorMsg');
+
+function resetSubmitBtn(){
+    submitBtn.disabled = false;
+    submitLbl.textContent = 'Process file';
+    submitSpin.style.display = 'none';
+}
 
 form.addEventListener('submit', function(e){
     e.preventDefault();
     if(!fi.files[0]){ alert('Please select a file first.'); return; }
 
-    submitBtn.disabled=true;
-    submitLbl.textContent='Processing\u2026';
-    submitSpin.style.display='block';
-    resPanel.style.display='none';
-    errPanel.style.display='none';
+    buildColumnTypeInputs();
 
-    // Rebuild FormData including reference files from DataTransfer
-    var fd = new FormData(form);
+    submitBtn.disabled = true;
+    submitLbl.textContent = 'Uploading…';
+    submitSpin.style.display = 'block';
+    resPanel.style.display = 'none';
+    errPanel.style.display = 'none';
+    if(pollInterval) clearInterval(pollInterval);
 
     fetch('{{ route("datasets.upload") }}', {
         method:'POST',
         headers:{'X-Requested-With':'XMLHttpRequest'},
-        body: fd,
+        body: new FormData(form),
     })
     .then(function(r){ return r.json(); })
-    .then(function(j){ j.status==='success' ? showResults(j) : showError(j.message||'An unexpected error occurred.'); })
-    .catch(function(err){ showError('Network error: '+err.message); })
-    .finally(function(){
-        submitBtn.disabled=false;
-        submitLbl.textContent='Process file';
-        submitSpin.style.display='none';
+    .then(function(j){
+        if (j.status === 'queued') {
+            submitLbl.textContent = 'Processing…';
+            startPolling(j.job_id);
+        } else if (j.status === 'error') {
+            showError(j.message || 'An unexpected error occurred.');
+            resetSubmitBtn();
+        }
+    })
+    .catch(function(err){
+        showError('Network error: ' + err.message);
+        resetSubmitBtn();
     });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RESULTS RENDERING
+// ─────────────────────────────────────────────────────────────────────────────
 function chip(lbl, val, cls){
     return '<div class="s-chip '+cls+'"><div class="v">'+val+'</div><div class="l">'+lbl+'</div></div>';
 }
@@ -622,13 +866,17 @@ function dlBtn(lbl, url, cls){
         lbl+'</a>';
 }
 
-function showResults(j){
-    var d=j.data||{}, u=j.download_urls||{};
+function showResults(json){
+    var d=json.data||{}, u=json.download_urls||{};
+    var rows  = d.final_rows     != null ? d.final_rows     : d.rows;
+    var cols  = d.final_cols     != null ? d.final_cols     : d.columns;
+    var nulls = d.null_remaining != null ? d.null_remaining : null;
+    var dedup = d.dedup_after_merge || 0;
     var chips=[];
-    if(d.final_rows    !=null) chips.push(chip('Output rows',        Number(d.final_rows).toLocaleString(), 'blue'));
-    if(d.final_cols    !=null) chips.push(chip('Columns',            d.final_cols,                         ''));
-    if(d.null_remaining!=null) chips.push(chip('NULLs remaining',   d.null_remaining,                     d.null_remaining>0?'amber':'green'));
-    if(d.dedup_after_merge>0)  chips.push(chip('Duplicates removed', d.dedup_after_merge,                  'amber'));
+    if(rows  != null) chips.push(chip('Output rows',        Number(rows).toLocaleString(), 'blue'));
+    if(cols  != null) chips.push(chip('Columns',            cols,                          ''));
+    if(nulls != null) chips.push(chip('NULLs remaining',   nulls,                         nulls>0?'amber':'green'));
+    if(dedup  > 0)    chips.push(chip('Duplicates removed', dedup,                         'amber'));
     resStats.innerHTML=chips.join('');
 
     var btns=[];
@@ -638,7 +886,7 @@ function showResults(j){
     if(u.report)     btns.push(dlBtn('JSON Report',  u.report,     's'));
     dlButtons.innerHTML=btns.join('');
 
-    ctxNotice.style.display=j.context_rules_applied?'block':'none';
+    ctxNotice.style.display=json.context_rules_applied?'block':'none';
     resPanel.style.display='block';
     resPanel.scrollIntoView({behavior:'smooth',block:'start'});
 }

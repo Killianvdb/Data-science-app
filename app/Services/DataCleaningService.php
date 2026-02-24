@@ -60,7 +60,18 @@ class DataCleaningService
             $pythonOutput,
         ]);
 
-        Log::info('[DataCleaner] Running', ['input' => $pythonInput, 'output' => $pythonOutput]);
+        // Pass options JSON as 3rd positional arg (use_llm + column_types)
+        $optionsJson = json_encode([
+            'use_llm'      => true,
+            'column_types' => $options['column_types'] ?? [],
+        ]);
+        $command[] = $optionsJson;
+
+        Log::info('[DataCleaner] Running', [
+            'input'        => $pythonInput,
+            'output'       => $pythonOutput,
+            'column_types' => $options['column_types'] ?? [],
+        ]);
 
         $process = new Process($command);
         $process->setTimeout(3600);

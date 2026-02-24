@@ -578,11 +578,13 @@ class DataCleaner:
     """
 
     def __init__(self, file_path: str, use_llm: bool = True,
-                 row_threshold: float = 0.5, col_threshold: float = 0.3):
+                 row_threshold: float = 0.5, col_threshold: float = 0.3,
+                 column_types: dict = None):
         self.file_path      = file_path
         self.use_llm        = use_llm
         self.row_threshold  = row_threshold
         self.col_threshold  = col_threshold
+        self.column_types   = column_types or {}   # user overrides from frontend
         self.df             = self._load_file(file_path)
         self.llm            = GeminiLLM() if use_llm else self._disabled_llm()
 
@@ -685,6 +687,23 @@ class DataCleaner:
             _safe_stderr("📋 Using heuristic fallback for type detection...")
             decisions = create_fallback_type_decisions(self.df)
 
+        # 3b. Apply user overrides from the frontend type picker
+        if self.column_types:
+            _safe_stderr(f"\n🎯 Applying {len(self.column_types)} user column type override(s)...")
+            TYPE_MAP = {
+                'date':       {'type': 'date',       'format': None},
+                'price':      {'type': 'price',      'format': None},
+                'integer':    {'type': 'numeric',    'format': 'integer'},
+                'text':       {'type': 'text',       'format': None},
+                'identifier': {'type': 'identifier', 'format': None},
+            }
+            if decisions is None:
+                decisions = {}
+            for col, user_type in self.column_types.items():
+                if col in self.df.columns and user_type in TYPE_MAP:
+                    decisions[col] = TYPE_MAP[user_type]
+                    _safe_stderr(f"   ✅ {col} → forced to '{user_type}'")
+
         # 4. Dates
         _safe_stderr(f"\n🔧 Date conversion...")
         self.df, date_columns = clean_dates(self.df, decisions, self.llm)
@@ -740,16 +759,18 @@ def main():
     input_file  = sys.argv[1]
     output_file = sys.argv[2]
 
-    use_llm = True
+    use_llm      = True
+    column_types = {}
     if len(sys.argv) >= 4:
         try:
-            options = json.loads(sys.argv[3])
-            use_llm = options.get('use_llm', True)
+            options      = json.loads(sys.argv[3])
+            use_llm      = options.get('use_llm', True)
+            column_types = options.get('column_types', {})
         except Exception:
             pass
 
     try:
-        cleaner  = DataCleaner(input_file, use_llm=use_llm)
+        cleaner  = DataCleaner(input_file, use_llm=use_llm, column_types=column_types)
         df_clean = cleaner.clean()
         df_clean.to_csv(output_file, index=False, quoting=csv.QUOTE_MINIMAL)
 

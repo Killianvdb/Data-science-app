@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Dataset;
 use App\Models\User;
+use App\Models\PipelineJob;
+use App\Jobs\ProcessPipelineJob;
 use App\Services\DataCleaningService;
 use App\Services\RulesConverterService;
 use Illuminate\Support\Facades\Storage;
@@ -44,24 +46,15 @@ class DatasetController extends Controller
     // SECURE FILENAME HELPERS
     // =========================================================================
 
-    /**
-     * Collision-safe filename prefix using microsecond uniqid + random suffix.
-     */
     protected function uniquePrefix(): string
     {
         return uniqid('', true) . '_' . Str::random(6);
     }
 
-    /**
-     * Validate a download filename and resolve it to a safe absolute path.
-     * Three-layer defence: basename() → regex whitelist → realpath() confinement.
-     * Returns null if any check fails.
-     */
     protected function resolveDownloadPath(string $rawFilename, int $userId): ?string
     {
         $filename = basename($rawFilename);
 
-        // Whitelist: only our generated filenames (.csv and .json reports, .pdf reports)
         if (!preg_match('/^[\w\-. ]+\.(csv|json|pdf)$/i', $filename)) {
             Log::warning('Download rejected: invalid filename pattern', [
                 'raw'     => $rawFilename,
@@ -102,18 +95,19 @@ class DatasetController extends Controller
     }
 
     // =========================================================================
-    // SINGLE FILE UPLOAD  (context form + optional reference files)
+    // SINGLE FILE UPLOAD — dispatches async job, returns job_id immediately
     // =========================================================================
 
     public function upload(Request $request)
     {
-        // ── Merge validation rules: file upload + context form ────────────────
         $request->validate(array_merge(
             [
                 'file'              => 'required|file|mimes:xlsx,xls,csv,txt,json,xml|max:20480',
                 'reference_files.*' => 'nullable|file|mimes:xlsx,xls,csv|max:10240',
                 'pipeline_mode'     => 'nullable|string|in:clean_only,full_pipeline',
                 'use_llm_enricher'  => 'nullable|boolean',
+                'column_types'      => 'nullable|array',
+                'column_types.*'    => 'nullable|string|in:auto,date,price,text,integer,identifier',
             ],
             RulesConverterService::validationRules()
         ));
@@ -180,7 +174,14 @@ class DatasetController extends Controller
                 'no_llm_enricher' => !$request->boolean('use_llm_enricher', true),
             ];
 
-            // Context form → rules.json  (replaces manual rules_file upload)
+            // Column type overrides from the preview type picker
+            $columnTypes = $request->input('column_types', []);
+            $columnTypes = array_filter($columnTypes, fn($t) => $t !== 'auto' && $t !== null);
+            if (!empty($columnTypes)) {
+                $options['column_types'] = $columnTypes;
+            }
+
+            // Context form → rules.json
             $contextFormData = $request->only([
                 'dataset_description',
                 'no_negative_cols',
@@ -190,7 +191,6 @@ class DatasetController extends Controller
                 'flag_only',
             ]);
 
-            // Strip empty strings that blank form inputs submit as ''
             foreach (['no_negative_cols', 'identifier_cols', 'required_cols'] as $key) {
                 if (isset($contextFormData[$key]) && is_array($contextFormData[$key])) {
                     $contextFormData[$key] = array_values(
@@ -198,7 +198,6 @@ class DatasetController extends Controller
                     );
                 }
             }
-            // Strip range rows where column is empty
             if (isset($contextFormData['range_rules']) && is_array($contextFormData['range_rules'])) {
                 $contextFormData['range_rules'] = array_values(
                     array_filter($contextFormData['range_rules'], fn($r) => trim((string) ($r['column'] ?? '')) !== '')
@@ -213,73 +212,33 @@ class DatasetController extends Controller
                     $this->uniquePrefix()
                 );
                 $options['rules_file'] = $rulesPath;
-                Log::info('[Upload] Context form converted to rules.json', [
-                    'rules_path' => $rulesPath,
-                    'rule_count' => count($this->rulesConverter->convert($contextFormData)['rules']),
-                ]);
             }
 
-            // ── Run pipeline ──────────────────────────────────────────────────
-            $pipelineMode = $request->input('pipeline_mode', 'full_pipeline');
+            // ── Create pipeline_jobs record ───────────────────────────────────
+            $pipelineMode = $request->input('pipeline_mode', 'clean_only');
 
-            if ($pipelineMode === 'clean_only' || empty($referenceFiles)) {
-                $result = $this->cleaningService->cleanUploadedFile($mainFilePath, $options);
-            } else {
-                $result = $this->cleaningService->runFullPipeline(
-                    $mainFilePath, $referenceFiles, $options
-                );
-            }
+            $pipelineJob = PipelineJob::create([
+                'user_id'       => $userId,
+                'filename'      => $file->getClientOriginalName(),
+                'pipeline_mode' => $pipelineMode,
+                'status'        => 'pending',
+                'current_step'  => 'uploading',
+                'progress_pct'  => 5,
+            ]);
 
-            // ── Generate PDF report ───────────────────────────────────────────
-            $pdfUrl = null;
-            if (!empty($result['report_file']) && file_exists($result['report_file'])) {
-                try {
-                    $pdfPath = $this->cleaningService->generatePdfReport(
-                        $result['report_file'],
-                        $userId
-                    );
-                    if ($pdfPath && file_exists($pdfPath)) {
-                        $result['report_pdf'] = $pdfPath;
-                        $pdfUrl = route('datasets.download', [
-                            'filename' => basename($pdfPath),
-                        ]);
-                    }
-                } catch (\Exception $e) {
-                    // PDF generation is non-critical — log but don't fail the request
-                    Log::warning('[Upload] PDF report generation failed', [
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            }
-
-            // ── Increment usage ───────────────────────────────────────────────
-            User::where('id', $user->id)->increment('files_used_this_month', 1);
-
-            // ── Build download URLs ───────────────────────────────────────────
-            $downloadUrls = [];
-            $fileMap = [
-                'cleaned_file_path' => 'cleaned',
-                'enriched_file'     => 'enriched',
-                'report_file'       => 'report',
-            ];
-            foreach ($fileMap as $key => $label) {
-                if (!empty($result[$key])) {
-                    $downloadUrls[$label] = route('datasets.download', [
-                        'filename' => basename($result[$key]),
-                    ]);
-                }
-            }
-            if ($pdfUrl) {
-                $downloadUrls['report_pdf'] = $pdfUrl;
-            }
+            // ── Dispatch the job ──────────────────────────────────────────────
+            ProcessPipelineJob::dispatch(
+                $pipelineJob->id,
+                $userId,
+                $mainFilePath,
+                $referenceFiles,
+                $pipelineMode,
+                $options
+            );
 
             return response()->json([
-                'status'        => 'success',
-                'message'       => 'File processed successfully!',
-                'data'          => $result,
-                'download_urls' => $downloadUrls,
-                'pipeline_mode' => $pipelineMode,
-                'context_rules_applied' => $hasContextData,
+                'status' => 'queued',
+                'job_id' => $pipelineJob->id,
             ]);
 
         } catch (\Exception $e) {
@@ -292,6 +251,19 @@ class DatasetController extends Controller
                 'message' => 'Failed to process file: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    // =========================================================================
+    // JOB STATUS — polled by frontend every 2 seconds
+    // =========================================================================
+
+    public function jobStatus(int $jobId)
+    {
+        $job = PipelineJob::where('id', $jobId)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        return response()->json($job->toStatusArray());
     }
 
     // =========================================================================
@@ -319,7 +291,7 @@ class DatasetController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'files'            => 'required|array|min:1',
-            'files.*'          => 'required|file|max:102400',
+            'files.*'          => 'required|file|max:51200',
             'use_llm_enricher' => 'nullable|boolean',
         ]);
 
@@ -461,9 +433,6 @@ class DatasetController extends Controller
     // PRIVATE HELPERS
     // =========================================================================
 
-    /**
-     * Returns true if the user filled in at least one context form field.
-     */
     private function hasAnyContextData(array $contextFormData): bool
     {
         if (!empty(trim($contextFormData['dataset_description'] ?? ''))) return true;
