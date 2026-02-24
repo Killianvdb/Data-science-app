@@ -33,10 +33,10 @@ class DataCleaningService
     // ENTRY POINT: clean a single uploaded file (no reference files)
     // =========================================================================
 
-    public function cleanUploadedFile(string $pathOrStorage, array $options = []): array
+    public function cleanUploadedFile(string $pathOrStorage, array $options = [], ?int $userId = null): array
     {
         $inputPath = $this->resolvePath($pathOrStorage);
-        $userId    = Auth::id() ?? 'shared';
+        $userId    = $userId ?? Auth::id() ?? 'shared';
         $outputDir = $this->sharedDataPath . '/cleaned/' . $userId;
         $this->ensureDir($outputDir);
 
@@ -50,8 +50,15 @@ class DataCleaningService
     public function cleanFile(string $inputPath, string $outputDir, array $options = []): array
     {
         $pythonInput  = $this->toDockerPath($inputPath);
-        $basename     = pathinfo($inputPath, PATHINFO_FILENAME);
-        $outputFile   = $outputDir . '/' . $basename . '_CLEANED.csv';
+        // pathinfo() is fooled by dots in the uniqid() prefix (699e03.86780355_file.xlsx)
+        // Use strrpos to split on the LAST dot only — gives correct basename + extension
+        $filenameOnly = basename($inputPath);
+        $lastDot      = strrpos($filenameOnly, '.');
+        $basename     = $lastDot !== false ? substr($filenameOnly, 0, $lastDot) : $filenameOnly;
+        $extension    = $lastDot !== false ? strtolower(substr($filenameOnly, $lastDot + 1)) : 'csv';
+        $outExt       = in_array($extension, ['xlsx', 'xls']) ? 'xlsx' : $extension;
+        $outExt       = in_array($outExt, ['csv', 'txt', 'json', 'xml', 'xlsx']) ? $outExt : 'csv';
+        $outputFile   = $outputDir . '/' . $basename . '_CLEANED.' . $outExt;
         $pythonOutput = $this->toDockerPath($outputFile);
 
         $command = $this->baseDockerCommand([
@@ -101,9 +108,9 @@ class DataCleaningService
     //   Step 2: data_cleaner.py     (sanitize formats on merged dataset)
     // =========================================================================
 
-    public function runFullPipeline(string $mainFile, array $referenceFiles = [], array $options = []): array
+    public function runFullPipeline(string $mainFile, array $referenceFiles = [], array $options = [], ?int $userId = null): array
     {
-        $userId     = Auth::id() ?? 'shared';
+        $userId     = $userId ?? Auth::id() ?? 'shared';
         $mergedDir  = $this->sharedDataPath . '/merged/'  . $userId;
         $cleanedDir = $this->sharedDataPath . '/cleaned/' . $userId;
         $resultsDir = $this->sharedDataPath . '/results/' . $userId;
