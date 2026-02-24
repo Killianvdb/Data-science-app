@@ -1,436 +1,653 @@
 <x-app-layout>
 
-<div class="max-w-3xl mx-auto">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-    {{-- ── Page header ─────────────────────────────────────────────────────── --}}
-    <div class="mb-8">
-        <h1 class="text-2xl font-bold text-gray-900">Upload Dataset</h1>
-        <p class="mt-1 text-sm text-gray-500">
-            Upload your file and optionally describe your data so the pipeline
-            can make smarter decisions.
-        </p>
+.up * { font-family: 'Sora', sans-serif; box-sizing: border-box; }
+.up .mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ── Layout ── */
+.up { max-width: 860px; margin: 0 auto; padding-bottom: 48px; }
+
+/* ── Card ── */
+.card {
+    background: #ffffff;
+    border: 1.5px solid #f0f0f0;
+    border-radius: 20px;
+    padding: 28px;
+    margin-bottom: 12px;
+}
+
+/* ── Section label ── */
+.sec-label {
+    font-size: 12px; font-weight: 600; letter-spacing: .07em;
+    text-transform: uppercase; color: #a0a0a0; margin: 0 0 14px;
+}
+
+/* ── Drop zone ── */
+.drop-zone {
+    position: relative;
+    border: 2px dashed #e4e4e4;
+    border-radius: 14px;
+    height: 128px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: border-color .18s, background .18s;
+    background: #fafafa;
+    overflow: hidden;
+}
+.drop-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 10; width: 100%; height: 100%;
+}
+.drop-zone:hover   { border-color: #bfdbfe; background: #f0f9ff; }
+.drop-zone.dragover { border-color: #3b82f6; background: #eff6ff; }
+.drop-zone.has-file { border-style: solid; border-color: #3b82f6; background: #eff6ff; }
+
+/* ── Reference file chips ── */
+.ref-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; min-height: 0; }
+.ref-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px 4px 8px; border-radius: 20px;
+    background: #eff6ff; border: 1px solid #bfdbfe;
+    font-size: 13px; color: #1e40af; font-family: 'JetBrains Mono', monospace;
+}
+.ref-chip button {
+    background: none; border: none; cursor: pointer; padding: 0;
+    color: #93c5fd; line-height: 1; font-size: 14px; display: flex;
+}
+.ref-chip button:hover { color: #2563eb; }
+.ref-add-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 12px; border-radius: 8px;
+    background: #eff6ff; border: 1.5px dashed #bfdbfe;
+    font-size: 13px; color: #2563eb; font-weight: 500;
+    cursor: pointer; transition: background .15s, border-color .15s;
+    position: relative; overflow: hidden;
+}
+.ref-add-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.ref-add-btn:hover { background: #dbeafe; border-color: #3b82f6; }
+
+/* ── Mode buttons ── */
+.mode-btn {
+    border: 2px solid #e8edf2; border-radius: 14px; padding: 20px;
+    cursor: pointer; transition: border-color .18s, background .18s;
+    background: #fafafa;
+}
+.mode-btn:hover { border-color: #bfdbfe; background: #f0f9ff; }
+.mode-btn.selected { border-color: #2563eb; background: #eff6ff; }
+.mode-btn-icon {
+    width: 40px; height: 40px; border-radius: 11px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 10px; background: #dbeafe; transition: background .18s;
+}
+.mode-btn.selected .mode-btn-icon { background: #2563eb; }
+.mode-btn.selected .mode-btn-icon svg { stroke: #fff; }
+.mode-btn-title { font-size: 14px; font-weight: 600; color: #1a1a1a; margin-bottom: 3px; }
+.mode-btn-desc  { font-size: 12px; color: #888; line-height: 1.5; }
+.mode-btn.selected .mode-btn-title { color: #1e40af; }
+
+/* ── Text inputs ── */
+.u-input {
+    width: 100%; padding: 9px 12px;
+    border: 1.5px solid #efefef; border-radius: 10px;
+    font-size: 14px; color: #1a1a1a; background: #fafafa;
+    outline: none; transition: border-color .15s;
+    font-family: 'Sora', sans-serif;
+}
+.u-input:focus { border-color: #3b82f6; background: #fff; }
+.u-input::placeholder { color: #bbb; }
+
+.u-textarea {
+    width: 100%; padding: 10px 12px;
+    border: 1.5px solid #efefef; border-radius: 10px;
+    font-size: 14px; color: #1a1a1a; background: #fafafa;
+    outline: none; resize: none; line-height: 1.6;
+    transition: border-color .15s;
+    font-family: 'Sora', sans-serif;
+}
+.u-textarea:focus { border-color: #3b82f6; background: #fff; }
+.u-textarea::placeholder { color: #bbb; }
+
+/* ── Context toggle ── */
+.ctx-toggle {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    background: none; border: none; padding: 0; cursor: pointer; text-align: left;
+}
+.ctx-arrow {
+    width: 26px; height: 26px; border-radius: 8px; background: #f5f5f5;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s, transform .22s; flex-shrink: 0;
+}
+.ctx-arrow.open { background: #dbeafe; transform: rotate(180deg); }
+
+/* ── Toggle switch ── */
+.sw-row { display: flex; align-items: flex-start; gap: 12px; padding: 13px 0; }
+.sw-row + .sw-row { border-top: 1px solid #f5f5f5; }
+.sw { position: relative; width: 38px; height: 22px; flex-shrink: 0; margin-top: 1px; }
+.sw input { opacity: 0; width: 0; height: 0; }
+.sw-track {
+    position: absolute; inset: 0; border-radius: 22px;
+    background: #e5e7eb; cursor: pointer; transition: background .2s;
+}
+.sw-track::after {
+    content: ''; position: absolute;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; top: 3px; left: 3px;
+    transition: transform .2s; box-shadow: 0 1px 4px rgba(0,0,0,.15);
+}
+.sw input:checked + .sw-track { background: #3b82f6; }
+.sw input:checked + .sw-track::after { transform: translateX(16px); }
+
+/* ── Add row buttons ── */
+.add-row-btn {
+    font-size: 12px; color: #3b82f6; font-weight: 500;
+    background: none; border: none; cursor: pointer; padding: 0; white-space: nowrap;
+    flex-shrink: 0;
+}
+.add-row-btn:hover { color: #1d4ed8; }
+.rm-btn {
+    font-size: 16px; color: #d1d5db; background: none; border: none;
+    cursor: pointer; padding: 0; line-height: 1; flex-shrink: 0;
+    transition: color .12s;
+}
+.rm-btn:hover { color: #ef4444; }
+
+/* ── Divider ── */
+.divider { height: 1px; background: #f5f5f5; margin: 18px 0; }
+
+/* ── Submit ── */
+.submit-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+.btn-submit {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 13px 32px; border-radius: 13px;
+    background: #2563eb; color: #fff;
+    font-size: 15px; font-weight: 600; font-family: 'Sora', sans-serif;
+    border: none; cursor: pointer;
+    box-shadow: 0 4px 20px rgba(37,99,235,.3);
+    transition: background .15s, transform .15s, box-shadow .15s;
+    letter-spacing: .01em;
+}
+.btn-submit:hover { background: #1d4ed8; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(37,99,235,.38); }
+.btn-submit:active { transform: translateY(0); }
+.btn-submit:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* ── Stat chips ── */
+.chips-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.s-chip { flex: 1; min-width: 100px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid #f0f0f0; }
+.s-chip .v { font-size: 22px; font-weight: 700; color: #1a1a1a; line-height: 1; }
+.s-chip .l { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #aaa; margin-top: 4px; }
+.s-chip.blue  { background: #f0f5ff; border-color: #c7d7fe; }
+.s-chip.blue .v { color: #3730a3; }
+.s-chip.green { background: #f0fdf4; border-color: #bbf7d0; }
+.s-chip.green .v { color: #15803d; }
+.s-chip.amber { background: #fffbeb; border-color: #fde68a; }
+.s-chip.amber .v { color: #b45309; }
+
+/* ── Download buttons ── */
+.dl-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.dl-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 16px; border-radius: 9px;
+    font-size: 13px; font-weight: 500; text-decoration: none;
+    transition: opacity .15s, transform .1s; font-family: 'Sora', sans-serif;
+}
+.dl-btn:hover { opacity: .85; transform: translateY(-1px); }
+.dl-btn.p { background: #2563eb; color: #fff; }
+.dl-btn.g { background: #16a34a; color: #fff; }
+.dl-btn.s { background: #f3f4f6; color: #374151; }
+
+/* ── Spinner ── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin .7s linear infinite; }
+
+/* ── Field label/hint ── */
+.fl { font-size: 13px; font-weight: 600; color: #2d2d2d; margin: 0 0 3px; display: block; }
+.fh { font-size: 12px; color: #aaa; margin: 0 0 8px; line-height: 1.5; }
+</style>
+
+<div class="up">
+
+    {{-- Header --}}
+    <div style="margin-bottom:24px;">
+        <h1 style="font-size:24px;font-weight:700;color:#111;margin:0 0 4px;font-family:'Sora',sans-serif;">Upload Dataset</h1>
+        <p style="font-size:14px;color:#aaa;margin:0;font-family:'Sora',sans-serif;">Clean, validate and enrich your data with AI.</p>
     </div>
 
-    {{-- ── Flash messages ──────────────────────────────────────────────────── --}}
-    @if (session('success'))
-        <div class="mb-6 rounded-lg bg-green-50 border border-green-200 p-4 text-green-800 text-sm">
-            {{ session('success') }}
-        </div>
+    @if(session('success'))
+    <div style="margin-bottom:12px;padding:12px 16px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;font-size:13px;color:#15803d;font-family:'Sora',sans-serif;">
+        {{ session('success') }}
+    </div>
     @endif
 
-    {{-- ── Form ────────────────────────────────────────────────────────────── --}}
     <form id="uploadForm" enctype="multipart/form-data" novalidate>
         @csrf
 
-        {{-- CARD 1 — File selection --}}
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-5">
-            <h2 class="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-bold">1</span>
-                Select your file
-            </h2>
+        {{-- ── CARD 1: Main file ── --}}
+        <div class="card">
+            <p class="sec-label">Main file</p>
 
-            <div id="dropZone"
-                 class="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 cursor-pointer transition-colors"
-                 role="button" tabindex="0" aria-label="Upload area">
+            <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="Upload file">
+                <input type="file" id="fileInput" name="file" accept=".xlsx,.xls,.csv,.txt,.json,.xml">
 
-                <input type="file" id="fileInput" name="file"
-                       accept=".xlsx,.xls,.csv,.txt,.json,.xml"
-                       class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-
-                <div id="dropDefault" class="text-center pointer-events-none select-none">
-                    <svg class="mx-auto mb-2 w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                <div id="dz-default" style="text-align:center;pointer-events:none;user-select:none;">
+                    <svg width="28" height="28" fill="none" stroke="#bfdbfe" stroke-width="1.5" viewBox="0 0 24 24" style="margin:0 auto 8px;display:block;">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
                     </svg>
-                    <p class="text-sm text-gray-600">
-                        <span class="font-medium text-blue-600">Click to upload</span> or drag &amp; drop
-                    </p>
-                    <p class="text-xs text-gray-400 mt-1">
-                        Supported: {{ implode(', ', $supportedFormats) }} &middot; Max 20 MB
-                    </p>
+                    <p style="font-size:13px;color:#555;margin:0;"><span style="color:#2563eb;font-weight:600;">Click to upload</span> or drag &amp; drop</p>
+                    <p class="mono" style="font-size:11px;color:#bbb;margin:4px 0 0;">{{ implode(' · ', $supportedFormats) }} · max 20 MB</p>
                 </div>
 
-                <div id="dropSelected" class="hidden text-center pointer-events-none select-none">
-                    <svg class="mx-auto mb-1 w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                <div id="dz-selected" style="display:none;text-align:center;pointer-events:none;user-select:none;">
+                    <svg width="22" height="22" fill="none" stroke="#2563eb" stroke-width="2" viewBox="0 0 24 24" style="margin:0 auto 6px;display:block;">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
                     </svg>
-                    <p class="text-sm font-medium text-gray-800" id="selectedFileName"></p>
-                    <p class="text-xs text-gray-400" id="selectedFileSize"></p>
+                    <p class="mono" style="font-size:13px;font-weight:500;color:#1e40af;margin:0;" id="dz-filename"></p>
+                    <p class="mono" style="font-size:11px;color:#93c5fd;margin:3px 0 0;" id="dz-filesize"></p>
                 </div>
-            </div>
-
-            <div class="mt-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">
-                    Reference files
-                    <span class="text-gray-400 font-normal">(optional &mdash; hold Ctrl/Cmd to select multiple)</span>
-                </label>
-                <input type="file" name="reference_files[]" id="referenceFiles"
-                       multiple accept=".xlsx,.xls,.csv"
-                       class="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
-                <p class="mt-1 text-xs text-gray-400" id="refFilesLabel">
-                    Products catalogue, customer list, etc. Used to enrich missing values.
-                </p>
-            </div>
-
-            <div class="mt-4 flex items-center gap-4">
-                <span class="text-sm font-medium text-gray-700">Mode:</span>
-                <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input type="radio" name="pipeline_mode" value="full_pipeline" checked class="text-blue-600 focus:ring-blue-500">
-                    <span class="text-sm text-gray-700">Full pipeline</span>
-                </label>
-                <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input type="radio" name="pipeline_mode" value="clean_only" class="text-blue-600 focus:ring-blue-500">
-                    <span class="text-sm text-gray-700">Clean only</span>
-                </label>
             </div>
         </div>
 
-        {{-- CARD 2 — Context (collapsible) --}}
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-5">
+        {{-- ── CARD 3: Reference files (only shown in full pipeline mode) ── --}}
+        <div class="card" id="refCard" style="display:none;">
+            <p class="sec-label">Reference files</p>
+            <p class="fh" style="margin-bottom:10px;">Products catalogue, customer list, lookup tables — used for cross-referencing and enrichment.</p>
 
-            <button type="button" id="toggleContext"
-                    class="w-full flex items-center justify-between text-left focus:outline-none">
-                <span class="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-bold">2</span>
-                    Tell us about your data
-                    <span class="text-xs font-normal text-gray-400">(optional)</span>
-                </span>
-                <span id="toggleIcon" class="text-gray-400 text-lg select-none">&#8595;</span>
+            <label class="ref-add-btn">
+                <input type="file" id="refPicker" accept=".xlsx,.xls,.csv" multiple style="position:absolute;inset:0;opacity:0;cursor:pointer;">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                </svg>
+                Add reference file
+            </label>
+
+            <div class="ref-chips" id="refChips"></div>
+            <div id="refHidden"></div>
+        </div>
+
+        {{-- ── CARD 2: Pipeline mode selector ── --}}
+        <input type="hidden" name="pipeline_mode" id="pipelineMode" value="clean_only">
+        <div class="card">
+            <p class="sec-label">Pipeline mode</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+
+                <div class="mode-btn selected" id="btn-clean" onclick="setMode('clean_only')">
+                    <div class="mode-btn-icon" id="icon-clean">
+                        <svg width="18" height="18" fill="none" stroke="#2563eb" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.3 24.3 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21a48.25 48.25 0 01-8.135-.687c-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"/>
+                        </svg>
+                    </div>
+                    <div class="mode-btn-title">Clean only</div>
+                    <div class="mode-btn-desc">Standardise dates, prices and formats. Fast, no merging.</div>
+                </div>
+
+                <div class="mode-btn" id="btn-full" onclick="setMode('full_pipeline')">
+                    <div class="mode-btn-icon" id="icon-full">
+                        <svg width="18" height="18" fill="none" stroke="#2563eb" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z"/>
+                        </svg>
+                    </div>
+                    <div class="mode-btn-title">Full pipeline</div>
+                    <div class="mode-btn-desc">Merge reference files, deduplicate, validate, enrich and clean.</div>
+                </div>
+
+            </div>
+        </div>
+
+        {{-- ── CARD 4: Dataset context (collapsible) ── --}}
+        <div class="card">
+            <button type="button" class="ctx-toggle" id="ctxToggle">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="width:32px;height:32px;border-radius:10px;background:#eff6ff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <svg width="15" height="15" fill="none" stroke="#3b82f6" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:#1a1a1a;">Dataset context</div>
+                        <div style="font-size:11.5px;color:#aaa;margin-top:1px;">Help the AI make smarter decisions</div>
+                    </div>
+                </div>
+                <div class="ctx-arrow" id="ctxArrow">
+                    <svg width="12" height="12" fill="none" stroke="#888" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </div>
             </button>
-            <p class="mt-1 text-xs text-gray-400 ml-7">
-                The more you tell us, the smarter the cleaning. No technical knowledge needed.
-            </p>
 
-            <div id="contextPanel" class="hidden mt-5 space-y-5">
+            <div id="ctxPanel" style="display:none;margin-top:20px;">
+                <div class="divider" style="margin-top:0;"></div>
 
-                <div>
-                    <label for="dataset_description" class="block text-sm font-medium text-gray-700 mb-1">
-                        What is this dataset about?
-                    </label>
-                    <textarea id="dataset_description" name="dataset_description"
-                              rows="2" maxlength="1000"
-                              placeholder="e.g. Monthly sales orders with product SKUs and customer details"
-                              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"></textarea>
-                    <p class="mt-1 text-xs text-gray-400">
-                        Helps the AI understand context &mdash; e.g. whether a temperature column can be negative.
-                    </p>
+                <div style="margin-bottom:16px;">
+                    <label class="fl">What is this dataset about?</label>
+                    <p class="fh">Domain context helps the AI understand whether values are valid — e.g. can a temperature be negative?</p>
+                    <textarea name="dataset_description" rows="2" maxlength="1000"
+                              placeholder="e.g. Monthly sales orders with product SKUs and customer details from our ERP system"
+                              class="u-textarea"></textarea>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">
-                        Which columns should always be positive?
-                    </label>
-                    <p class="text-xs text-gray-400 mb-2">Negative values will be auto-corrected (sign error assumed).</p>
-                    <div id="noNegativeContainer" class="space-y-2">
-                        <div class="flex gap-2 items-center">
-                            <input type="text" name="no_negative_cols[]"
-                                   placeholder="Column name, e.g. quantity" maxlength="100"
-                                   class="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                            <button type="button" onclick="addTextRow('noNegativeContainer','no_negative_cols[]','Column name, e.g. salary')"
-                                    class="shrink-0 text-xs text-blue-600 hover:text-blue-800 font-medium">+ Add</button>
+                <div style="margin-bottom:16px;">
+                    <label class="fl">Columns that must always be positive</label>
+                    <p class="fh">Negative values will be auto-corrected (sign error assumed).</p>
+                    <div id="nnCont" style="display:flex;flex-direction:column;gap:6px;">
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <input type="text" name="no_negative_cols[]" placeholder="e.g. quantity, unit_price" maxlength="100" class="u-input">
+                            <button type="button" class="add-row-btn" onclick="addTxtRow('nnCont','no_negative_cols[]','e.g. stock_count')">+ Add</button>
                         </div>
                     </div>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">
-                        Which columns are unique identifiers?
-                    </label>
-                    <p class="text-xs text-gray-400 mb-2">IDs, emails, codes &mdash; never imputed or modified.</p>
-                    <div id="identifierContainer" class="space-y-2">
-                        <div class="flex gap-2 items-center">
-                            <input type="text" name="identifier_cols[]"
-                                   placeholder="Column name, e.g. customer_id" maxlength="100"
-                                   class="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                            <button type="button" onclick="addTextRow('identifierContainer','identifier_cols[]','Column name, e.g. order_id')"
-                                    class="shrink-0 text-xs text-blue-600 hover:text-blue-800 font-medium">+ Add</button>
+                <div style="margin-bottom:16px;">
+                    <label class="fl">Unique identifier columns</label>
+                    <p class="fh">IDs, emails, codes — never imputed or modified by the pipeline.</p>
+                    <div id="idCont" style="display:flex;flex-direction:column;gap:6px;">
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <input type="text" name="identifier_cols[]" placeholder="e.g. customer_id, order_id" maxlength="100" class="u-input">
+                            <button type="button" class="add-row-btn" onclick="addTxtRow('idCont','identifier_cols[]','e.g. sku, product_code')">+ Add</button>
                         </div>
                     </div>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Known valid ranges?</label>
-                    <p class="text-xs text-gray-400 mb-2">Values outside these ranges will be flagged. Example: age min 0 max 120.</p>
-                    <div id="rangeContainer" class="space-y-2">
-                        <div class="flex flex-wrap gap-2 items-center">
-                            <input type="text"   name="range_rules[0][column]" placeholder="Column" maxlength="100"
-                                   class="w-28 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                            <span class="text-xs text-gray-500">min</span>
-                            <input type="number" name="range_rules[0][min]" placeholder="0"
-                                   class="w-20 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                            <span class="text-xs text-gray-500">max</span>
-                            <input type="number" name="range_rules[0][max]" placeholder="100"
-                                   class="w-20 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                            <button type="button" onclick="addRangeRow()"
-                                    class="shrink-0 text-xs text-blue-600 hover:text-blue-800 font-medium">+ Add</button>
+                <div style="margin-bottom:4px;">
+                    <label class="fl">Known valid ranges</label>
+                    <p class="fh">Values outside these ranges are flagged for review. e.g. age: 0–120</p>
+                    <div id="rangeCont" style="display:flex;flex-direction:column;gap:6px;">
+                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                            <input type="text"   name="range_rules[0][column]" placeholder="Column" maxlength="100" style="flex:2;min-width:80px;" class="u-input">
+                            <span style="font-size:11px;color:#bbb;">min</span>
+                            <input type="number" name="range_rules[0][min]" placeholder="0"   style="flex:1;min-width:58px;" class="u-input">
+                            <span style="font-size:11px;color:#bbb;">max</span>
+                            <input type="number" name="range_rules[0][max]" placeholder="100" style="flex:1;min-width:58px;" class="u-input">
+                            <button type="button" class="add-row-btn" onclick="addRangeRow()">+ Add</button>
                         </div>
                     </div>
                 </div>
 
-                <div class="flex items-start gap-3 pt-3 border-t border-gray-100">
-                    <input type="checkbox" id="flag_only" name="flag_only" value="1"
-                           class="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                <div class="divider"></div>
+
+                <div class="sw-row">
+                    <label class="sw"><input type="checkbox" id="flag_only" name="flag_only" value="1"><span class="sw-track"></span></label>
                     <div>
-                        <label for="flag_only" class="text-sm font-medium text-gray-700 cursor-pointer">Flag only &mdash; never auto-correct</label>
-                        <p class="text-xs text-gray-400">All suspicious values are flagged for human review instead of being fixed.</p>
+                        <div style="font-size:13px;font-weight:500;color:#1a1a1a;cursor:pointer;" onclick="document.getElementById('flag_only').click()">Flag only — never auto-correct</div>
+                        <div style="font-size:12px;color:#aaa;margin-top:2px;">Suspicious values are flagged for human review instead of being automatically fixed.</div>
                     </div>
                 </div>
 
-                <div class="flex items-start gap-3">
-                    <input type="checkbox" id="use_llm_enricher" name="use_llm_enricher" value="1" checked
-                           class="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                <div class="sw-row">
+                    <label class="sw"><input type="checkbox" id="use_llm_enricher" name="use_llm_enricher" value="1" checked><span class="sw-track"></span></label>
                     <div>
-                        <label for="use_llm_enricher" class="text-sm font-medium text-gray-700 cursor-pointer">Use AI to predict missing values</label>
-                        <p class="text-xs text-gray-400">The AI fills in missing values based on surrounding rows. Disable for faster processing.</p>
+                        <div style="font-size:13px;font-weight:500;color:#1a1a1a;cursor:pointer;" onclick="document.getElementById('use_llm_enricher').click()">Use AI to predict missing values</div>
+                        <div style="font-size:12px;color:#aaa;margin-top:2px;">The AI fills in missing values based on surrounding rows. Disable for faster processing.</div>
                     </div>
                 </div>
-
             </div>
         </div>
 
-        {{-- Submit --}}
-        <div class="flex items-center justify-between">
-            <p class="text-xs text-gray-400">
+        {{-- ── Submit ── --}}
+        <div class="submit-row">
+            <p style="font-size:12px;color:#bbb;margin:0;font-family:'Sora',sans-serif;">
                 @if(isset($planSlug) && $planSlug === 'pro')
-                    Pro plan &middot; 20 MB max per file
+                    <span style="color:#2563eb;font-weight:600;">Pro</span> · 20 MB max
                 @else
-                    Free plan &middot; upgrade for larger files and batch processing
+                    Free plan · <a href="#" style="color:#2563eb;font-weight:500;text-decoration:none;">upgrade</a> for larger files
                 @endif
             </p>
-            <button type="submit" id="submitBtn"
-                    class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+            <button type="submit" class="btn-submit" id="submitBtn">
                 <span id="submitLabel">Process file</span>
-                <svg id="submitSpinner" class="hidden animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                <svg id="submitSpinner" class="spin" style="display:none;width:15px;height:15px;" fill="none" viewBox="0 0 24 24">
+                    <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3.5"/>
+                    <path style="opacity:.9" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
                 </svg>
             </button>
         </div>
     </form>
 
-    {{-- Results --}}
-    <div id="resultsPanel" class="hidden mt-8 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h2 class="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+    {{-- ── Results ── --}}
+    <div id="resultsPanel" style="display:none;margin-top:12px;" class="card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+            <svg width="18" height="18" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
-            Processing complete
-        </h2>
-        <div id="resultStats" class="flex flex-wrap gap-3 mb-5"></div>
-        <div id="downloadButtons" class="flex flex-wrap gap-3"></div>
-        <div id="contextRulesNotice" class="hidden mt-3 text-xs text-blue-700 bg-blue-50 rounded-md px-3 py-2">
-            Your dataset context was applied &mdash; custom validation rules were generated from your form.
+            <span style="font-size:14px;font-weight:600;color:#111;font-family:'Sora',sans-serif;">Processing complete</span>
+        </div>
+        <div class="chips-row" id="resultStats"></div>
+        <div class="dl-row" id="dlButtons"></div>
+        <div id="ctxNotice" style="display:none;margin-top:12px;font-size:12px;color:#1d4ed8;background:#eff6ff;border-radius:8px;padding:8px 12px;font-family:'Sora',sans-serif;">
+            ✓ Custom validation rules were generated from your dataset context.
         </div>
     </div>
 
-    {{-- Error --}}
-    <div id="errorPanel" class="hidden mt-6 bg-red-50 border border-red-200 rounded-lg p-4">
-        <p class="text-sm font-semibold text-red-800">Processing error</p>
-        <p id="errorMessage" class="text-sm text-red-600 mt-1"></p>
+    {{-- ── Error ── --}}
+    <div id="errorPanel" style="display:none;margin-top:12px;padding:14px 16px;background:#fff1f2;border:1.5px solid #fecdd3;border-radius:14px;font-family:'Sora',sans-serif;">
+        <p style="font-size:13px;font-weight:600;color:#be123c;margin:0 0 3px;">Processing error</p>
+        <p id="errorMsg" style="font-size:13px;color:#e11d48;margin:0;"></p>
     </div>
 
 </div>
 
 <script>
-(function () {
-    'use strict';
+(function(){
+'use strict';
 
-    // Drop zone
-    var dropZone    = document.getElementById('dropZone');
-    var fileInput   = document.getElementById('fileInput');
-    var dropDefault = document.getElementById('dropDefault');
-    var dropSelected = document.getElementById('dropSelected');
-    var selectedFileName = document.getElementById('selectedFileName');
-    var selectedFileSize = document.getElementById('selectedFileSize');
-    var refFilesLabel    = document.getElementById('refFilesLabel');
-    var referenceFiles   = document.getElementById('referenceFiles');
+// ── Drop zone ──────────────────────────────────────────────────────────────────
+var dz   = document.getElementById('dropZone');
+var fi   = document.getElementById('fileInput');
+var dzDef = document.getElementById('dz-default');
+var dzSel = document.getElementById('dz-selected');
+var dzFn  = document.getElementById('dz-filename');
+var dzFs  = document.getElementById('dz-filesize');
 
-    function formatBytes(b) {
-        if (b < 1024) return b + ' B';
-        if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
-        return (b/1048576).toFixed(1) + ' MB';
+function fmtBytes(b){ return b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(1)+' MB'; }
+
+function showMainFile(f){
+    dzDef.style.display='none'; dzSel.style.display='block';
+    dzFn.textContent=f.name; dzFs.textContent=fmtBytes(f.size);
+    dz.classList.add('has-file'); dz.classList.remove('dragover');
+}
+
+fi.addEventListener('change', function(){ if(this.files[0]) showMainFile(this.files[0]); });
+dz.addEventListener('dragover',  function(e){ e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', function(){ dz.classList.remove('dragover'); });
+dz.addEventListener('drop', function(e){
+    e.preventDefault(); dz.classList.remove('dragover');
+    if(e.dataTransfer.files[0]){
+        try{ var dt=new DataTransfer(); dt.items.add(e.dataTransfer.files[0]); fi.files=dt.files; }catch(x){}
+        showMainFile(e.dataTransfer.files[0]);
     }
+});
+dz.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fi.click(); }});
 
-    function showFile(file) {
-        dropDefault.classList.add('hidden');
-        dropSelected.classList.remove('hidden');
-        selectedFileName.textContent = file.name;
-        selectedFileSize.textContent = formatBytes(file.size);
-        dropZone.classList.add('border-blue-400', 'bg-blue-50');
+// ── Reference files ────────────────────────────────────────────────────────────
+var refPicker  = document.getElementById('refPicker');
+var refChips   = document.getElementById('refChips');
+var refHidden  = document.getElementById('refHidden');
+var refFiles   = []; // {name, file}
+
+refPicker.addEventListener('change', function(){
+    Array.from(this.files).forEach(function(f){
+        // avoid duplicates by name
+        if(refFiles.some(function(r){ return r.name===f.name; })) return;
+        refFiles.push({name: f.name, file: f});
+        addRefChip(f.name);
+        rebuildHiddenInputs();
+    });
+    refPicker.value='';
+});
+
+function addRefChip(name){
+    var chip = document.createElement('div');
+    chip.className = 'ref-chip';
+    chip.dataset.name = name;
+    chip.innerHTML =
+        '<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>' +
+        '<span>' + name + '</span>' +
+        '<button type="button" onclick="removeRef(this,\''+name+'\')" aria-label="Remove">' +
+        '<svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>';
+    refChips.appendChild(chip);
+}
+
+window.removeRef = function(btn, name){
+    refFiles = refFiles.filter(function(r){ return r.name!==name; });
+    btn.closest('.ref-chip').remove();
+    rebuildHiddenInputs();
+    updatePipelineMode();
+};
+
+function rebuildHiddenInputs(){
+    // We can't set files on hidden inputs programmatically in a cross-browser way,
+    // so we use a DataTransfer object on the actual refPicker to carry all files,
+    // and use a separate approach: clone the files into a fresh file input for each.
+    refHidden.innerHTML='';
+    // Build a new multi-file picker carrying all selected files
+    var dt = new DataTransfer();
+    refFiles.forEach(function(r){ dt.items.add(r.file); });
+    // Create one file input that will carry all files
+    var inp = document.createElement('input');
+    inp.type='file'; inp.name='reference_files[]'; inp.multiple=true;
+    inp.style.display='none';
+    try{ inp.files = dt.files; }catch(x){}
+    refHidden.appendChild(inp);
+}
+
+// ── Pipeline mode toggle ──────────────────────────────────────────────────────
+window.setMode = function(mode) {
+    document.getElementById('pipelineMode').value = mode;
+
+    var btnClean = document.getElementById('btn-clean');
+    var btnFull  = document.getElementById('btn-full');
+    var iconClean = document.getElementById('icon-clean');
+    var iconFull  = document.getElementById('icon-full');
+    var refCard  = document.getElementById('refCard');
+
+    if (mode === 'full_pipeline') {
+        btnFull.classList.add('selected');
+        btnClean.classList.remove('selected');
+        iconFull.classList.add('active');
+        iconClean.classList.remove('active');
+        refCard.style.display = 'block';
+    } else {
+        btnClean.classList.add('selected');
+        btnFull.classList.remove('selected');
+        iconClean.classList.add('active');
+        iconFull.classList.remove('active');
+        refCard.style.display = 'none';
+        // Clear ref files when switching back to clean only
+        refFiles = [];
+        document.getElementById('refChips').innerHTML = '';
+        document.getElementById('refHidden').innerHTML = '';
     }
+};
+function updatePipelineMode() {} // kept for compat
 
-    fileInput.addEventListener('change', function () {
-        if (this.files[0]) showFile(this.files[0]);
+// ── Context toggle ─────────────────────────────────────────────────────────────
+var ctxToggle = document.getElementById('ctxToggle');
+var ctxPanel  = document.getElementById('ctxPanel');
+var ctxArrow  = document.getElementById('ctxArrow');
+var ctxOpen   = false;
+
+ctxToggle.addEventListener('click', function(){
+    ctxOpen = !ctxOpen;
+    ctxPanel.style.display = ctxOpen ? 'block' : 'none';
+    ctxArrow.classList.toggle('open', ctxOpen);
+});
+
+// ── Dynamic rows ───────────────────────────────────────────────────────────────
+window.addTxtRow = function(cid, name, ph){
+    var c=document.getElementById(cid), d=document.createElement('div');
+    d.style.cssText='display:flex;gap:6px;align-items:center;';
+    d.innerHTML='<input type="text" name="'+name+'" placeholder="'+ph+'" maxlength="100" class="u-input">' +
+        '<button type="button" class="rm-btn" onclick="this.closest(\'div\').remove()">×</button>';
+    c.appendChild(d);
+};
+
+var ri=1;
+window.addRangeRow = function(){
+    var i=ri++, c=document.getElementById('rangeCont'), d=document.createElement('div');
+    d.style.cssText='display:flex;gap:6px;align-items:center;flex-wrap:wrap;';
+    d.innerHTML=
+        '<input type="text" name="range_rules['+i+'][column]" placeholder="Column" maxlength="100" style="flex:2;min-width:80px;" class="u-input">'+
+        '<span style="font-size:11px;color:#bbb;">min</span>'+
+        '<input type="number" name="range_rules['+i+'][min]" placeholder="0" style="flex:1;min-width:58px;" class="u-input">'+
+        '<span style="font-size:11px;color:#bbb;">max</span>'+
+        '<input type="number" name="range_rules['+i+'][max]" placeholder="100" style="flex:1;min-width:58px;" class="u-input">'+
+        '<button type="button" class="rm-btn" onclick="this.closest(\'div\').remove()">×</button>';
+    c.appendChild(d);
+};
+
+// ── Form submit ────────────────────────────────────────────────────────────────
+var form        = document.getElementById('uploadForm');
+var submitBtn   = document.getElementById('submitBtn');
+var submitLbl   = document.getElementById('submitLabel');
+var submitSpin  = document.getElementById('submitSpinner');
+var resPanel    = document.getElementById('resultsPanel');
+var resStats    = document.getElementById('resultStats');
+var dlButtons   = document.getElementById('dlButtons');
+var ctxNotice   = document.getElementById('ctxNotice');
+var errPanel    = document.getElementById('errorPanel');
+var errMsg      = document.getElementById('errorMsg');
+
+form.addEventListener('submit', function(e){
+    e.preventDefault();
+    if(!fi.files[0]){ alert('Please select a file first.'); return; }
+
+    submitBtn.disabled=true;
+    submitLbl.textContent='Processing\u2026';
+    submitSpin.style.display='block';
+    resPanel.style.display='none';
+    errPanel.style.display='none';
+
+    // Rebuild FormData including reference files from DataTransfer
+    var fd = new FormData(form);
+
+    fetch('{{ route("datasets.upload") }}', {
+        method:'POST',
+        headers:{'X-Requested-With':'XMLHttpRequest'},
+        body: fd,
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(j){ j.status==='success' ? showResults(j) : showError(j.message||'An unexpected error occurred.'); })
+    .catch(function(err){ showError('Network error: '+err.message); })
+    .finally(function(){
+        submitBtn.disabled=false;
+        submitLbl.textContent='Process file';
+        submitSpin.style.display='none';
     });
+});
 
-    dropZone.addEventListener('dragover', function (e) {
-        e.preventDefault();
-        dropZone.classList.add('border-blue-400', 'bg-blue-50');
-    });
-    dropZone.addEventListener('dragleave', function () {
-        if (!fileInput.files[0]) dropZone.classList.remove('border-blue-400', 'bg-blue-50');
-    });
-    dropZone.addEventListener('drop', function (e) {
-        e.preventDefault();
-        if (e.dataTransfer.files[0]) {
-            try {
-                var dt = new DataTransfer();
-                dt.items.add(e.dataTransfer.files[0]);
-                fileInput.files = dt.files;
-            } catch(err) {}
-            showFile(e.dataTransfer.files[0]);
-        }
-    });
-    dropZone.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
-    });
+function chip(lbl, val, cls){
+    return '<div class="s-chip '+cls+'"><div class="v">'+val+'</div><div class="l">'+lbl+'</div></div>';
+}
+function dlBtn(lbl, url, cls){
+    return '<a href="'+url+'" download class="dl-btn '+cls+'">' +
+        '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>' +
+        lbl+'</a>';
+}
 
-    referenceFiles.addEventListener('change', function () {
-        var n = this.files.length;
-        refFilesLabel.textContent = n === 0
-            ? 'Products catalogue, customer list, etc. Used to enrich missing values.'
-            : n + ' file' + (n > 1 ? 's' : '') + ' selected.';
-    });
+function showResults(j){
+    var d=j.data||{}, u=j.download_urls||{};
+    var chips=[];
+    if(d.final_rows    !=null) chips.push(chip('Output rows',        Number(d.final_rows).toLocaleString(), 'blue'));
+    if(d.final_cols    !=null) chips.push(chip('Columns',            d.final_cols,                         ''));
+    if(d.null_remaining!=null) chips.push(chip('NULLs remaining',   d.null_remaining,                     d.null_remaining>0?'amber':'green'));
+    if(d.dedup_after_merge>0)  chips.push(chip('Duplicates removed', d.dedup_after_merge,                  'amber'));
+    resStats.innerHTML=chips.join('');
 
-    // Context panel toggle
-    var toggleBtn    = document.getElementById('toggleContext');
-    var contextPanel = document.getElementById('contextPanel');
-    var toggleIcon   = document.getElementById('toggleIcon');
-    var panelOpen    = false;
+    var btns=[];
+    if(u.cleaned)    btns.push(dlBtn('Cleaned CSV',  u.cleaned,    'p'));
+    if(u.enriched)   btns.push(dlBtn('Enriched CSV', u.enriched,   'p'));
+    if(u.report_pdf) btns.push(dlBtn('PDF Report',   u.report_pdf, 'g'));
+    if(u.report)     btns.push(dlBtn('JSON Report',  u.report,     's'));
+    dlButtons.innerHTML=btns.join('');
 
-    toggleBtn.addEventListener('click', function () {
-        panelOpen = !panelOpen;
-        if (panelOpen) {
-            contextPanel.classList.remove('hidden');
-            toggleIcon.innerHTML = '&#8593;';
-        } else {
-            contextPanel.classList.add('hidden');
-            toggleIcon.innerHTML = '&#8595;';
-        }
-    });
+    ctxNotice.style.display=j.context_rules_applied?'block':'none';
+    resPanel.style.display='block';
+    resPanel.scrollIntoView({behavior:'smooth',block:'start'});
+}
 
-    // Dynamic rows
-    window.addTextRow = function (containerId, fieldName, placeholder) {
-        var container = document.getElementById(containerId);
-        var row = document.createElement('div');
-        row.className = 'flex gap-2 items-center';
-        row.innerHTML = '<input type="text" name="' + fieldName + '" placeholder="' + placeholder + '" maxlength="100" ' +
-            'class="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">' +
-            '<button type="button" onclick="this.closest(\'div\').remove()" ' +
-            'class="shrink-0 text-xs text-red-400 hover:text-red-600 font-medium">Remove</button>';
-        container.appendChild(row);
-    };
-
-    var rangeIdx = 1;
-    window.addRangeRow = function () {
-        var i = rangeIdx++;
-        var container = document.getElementById('rangeContainer');
-        var row = document.createElement('div');
-        row.className = 'flex flex-wrap gap-2 items-center';
-        row.innerHTML =
-            '<input type="text" name="range_rules[' + i + '][column]" placeholder="Column" maxlength="100" ' +
-            'class="w-28 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">' +
-            '<span class="text-xs text-gray-500">min</span>' +
-            '<input type="number" name="range_rules[' + i + '][min]" placeholder="0" ' +
-            'class="w-20 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">' +
-            '<span class="text-xs text-gray-500">max</span>' +
-            '<input type="number" name="range_rules[' + i + '][max]" placeholder="100" ' +
-            'class="w-20 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">' +
-            '<button type="button" onclick="this.closest(\'div\').remove()" ' +
-            'class="shrink-0 text-xs text-red-400 hover:text-red-600 font-medium">Remove</button>';
-        container.appendChild(row);
-    };
-
-    // Form submit
-    var form          = document.getElementById('uploadForm');
-    var submitBtn     = document.getElementById('submitBtn');
-    var submitLabel   = document.getElementById('submitLabel');
-    var submitSpinner = document.getElementById('submitSpinner');
-    var resultsPanel  = document.getElementById('resultsPanel');
-    var resultStats   = document.getElementById('resultStats');
-    var downloadButtons    = document.getElementById('downloadButtons');
-    var contextRulesNotice = document.getElementById('contextRulesNotice');
-    var errorPanel    = document.getElementById('errorPanel');
-    var errorMessage  = document.getElementById('errorMessage');
-
-    form.addEventListener('submit', function (e) {
-        e.preventDefault();
-
-        if (!fileInput.files[0]) {
-            alert('Please select a file first.');
-            return;
-        }
-
-        submitBtn.disabled = true;
-        submitLabel.textContent = 'Processing\u2026';
-        submitSpinner.classList.remove('hidden');
-        resultsPanel.classList.add('hidden');
-        errorPanel.classList.add('hidden');
-
-        var formData = new FormData(form);
-
-        fetch('{{ route("datasets.upload") }}', {
-            method:  'POST',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            body:    formData,
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (json) {
-            if (json.status === 'success') {
-                showResults(json);
-            } else {
-                showError(json.message || 'An unexpected error occurred.');
-            }
-        })
-        .catch(function (err) {
-            showError('Network error: ' + err.message);
-        })
-        .finally(function () {
-            submitBtn.disabled = false;
-            submitLabel.textContent = 'Process file';
-            submitSpinner.classList.add('hidden');
-        });
-    });
-
-    function statChip(label, value, colour) {
-        var map = { gray: 'bg-gray-100 text-gray-700', blue: 'bg-blue-50 text-blue-700', green: 'bg-green-50 text-green-700', amber: 'bg-amber-50 text-amber-700' };
-        return '<div class="rounded-lg px-3 py-2 ' + (map[colour] || map.gray) + '"><p class="text-lg font-bold">' + value + '</p><p class="text-xs">' + label + '</p></div>';
-    }
-
-    function dlBtn(label, url, style) {
-        var map = { primary: 'bg-blue-600 hover:bg-blue-700 text-white', secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-800', accent: 'bg-green-600 hover:bg-green-700 text-white' };
-        return '<a href="' + url + '" download class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ' + (map[style] || map.primary) + '">' +
-            '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>' +
-            label + '</a>';
-    }
-
-    function showResults(json) {
-        var data = json.data || {};
-        var urls = json.download_urls || {};
-        var chips = [];
-        if (data.final_rows    != null) chips.push(statChip('Output rows',         Number(data.final_rows).toLocaleString(), 'blue'));
-        if (data.final_cols    != null) chips.push(statChip('Columns',             data.final_cols,                          'gray'));
-        if (data.null_remaining != null) chips.push(statChip('NULLs remaining',   data.null_remaining,                      data.null_remaining > 0 ? 'amber' : 'green'));
-        if (data.dedup_after_merge > 0)  chips.push(statChip('Duplicates removed', data.dedup_after_merge,                  'amber'));
-        resultStats.innerHTML = chips.join('');
-
-        var btns = [];
-        if (urls.cleaned)    btns.push(dlBtn('Download cleaned CSV',  urls.cleaned,    'primary'));
-        if (urls.enriched)   btns.push(dlBtn('Download enriched CSV', urls.enriched,   'primary'));
-        if (urls.report_pdf) btns.push(dlBtn('Download PDF report',   urls.report_pdf, 'accent'));
-        if (urls.report)     btns.push(dlBtn('Download JSON report',  urls.report,     'secondary'));
-        downloadButtons.innerHTML = btns.join('');
-
-        contextRulesNotice.classList.toggle('hidden', !json.context_rules_applied);
-        resultsPanel.classList.remove('hidden');
-        resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function showError(msg) {
-        errorMessage.textContent = msg;
-        errorPanel.classList.remove('hidden');
-        errorPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+function showError(msg){
+    errMsg.textContent=msg;
+    errPanel.style.display='block';
+    errPanel.scrollIntoView({behavior:'smooth',block:'start'});
+}
 
 })();
 </script>
