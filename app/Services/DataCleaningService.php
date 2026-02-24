@@ -9,16 +9,17 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * DataCleaningService v3.0
+ * DataCleaningService v5.0
  * ========================
- * Pipeline order (correct) :
- *   1. cross_reference.py  — merge all files + dedup on full dataset + validate + enrich
- *   2. data_cleaner.py     — sanitize (dates, prices, negatives) on merged+deduped data
+ * Pipeline 4 étapes :
+ *   1. data_cleaner.py  sur chaque fichier individuellement
+ *   2. cross_reference.py  sur les fichiers nettoyés (merge + validate + enrich)
+ *   3. data_cleaner.py  sur le fichier fusionné (re-nettoyage final)
  *
- * Why this order?
- *   - Deduplication on merged data catches inter-file duplicates that per-file cleaning misses
- *   - Validation runs on the complete picture, not partial data
- *   - Cleaning standardizes formats after the full dataset is assembled
+ * Pourquoi 3 passes ?
+ *   - Pass 1 : nettoie les erreurs internes à chaque fichier
+ *   - Cross-ref : détecte les doublons inter-fichiers, enrichit les NULLs
+ *   - Pass 2 : re-nettoie ce que le merge a pu introduire (NaN, incohérences)
  */
 class DataCleaningService
 {
@@ -28,7 +29,7 @@ class DataCleaningService
     protected string $crossRefScript = '/app/cross_reference.py';
 
     // =========================================================================
-    // ENTRY POINT: clean a single uploaded file (no reference files)
+    // ENTRY POINT: clean a single uploaded file (no cross-ref needed)
     // =========================================================================
 
     public function cleanUploadedFile(string $pathOrStorage, array $options = []): array
@@ -58,7 +59,7 @@ class DataCleaningService
             $pythonOutput,
         ]);
 
-        Log::info('[DataCleaner] Running', ['input' => $pythonInput, 'output' => $pythonOutput]);
+        Log::info('[DataCleaner] Running', ['input' => $pythonInput]);
 
         $process = new Process($command);
         $process->setTimeout(3600);
@@ -72,7 +73,6 @@ class DataCleaningService
                 $result['cleaned_file_path'] = $outputFile;
             }
 
-            Log::info('[DataCleaner] Done', $result);
             return $result;
 
         } catch (ProcessFailedException $e) {
@@ -83,85 +83,88 @@ class DataCleaningService
     }
 
     // =========================================================================
-    // FULL PIPELINE — correct order:
-    //   Step 1: cross_reference.py  (merge + dedup + validate + enrich)
-    //   Step 2: data_cleaner.py     (sanitize formats on merged dataset)
+    // FULL PIPELINE — 3 passes
+    //
+    //   Pass 1 : clean each file individually
+    //   Pass 2 : cross-reference (merge + dedup inter-files + validate + enrich)
+    //   Pass 3 : re-clean the merged file
     // =========================================================================
 
     public function runFullPipeline(string $mainFile, array $referenceFiles = [], array $options = []): array
     {
-        $userId      = Auth::id() ?? 'shared';
-        $mergedDir   = $this->sharedDataPath . '/merged/'  . $userId;
-        $cleanedDir  = $this->sharedDataPath . '/cleaned/' . $userId;
-        $resultsDir  = $this->sharedDataPath . '/results/' . $userId;
-        $this->ensureDir($mergedDir);
-        $this->ensureDir($cleanedDir);
-        $this->ensureDir($resultsDir);
-
-        $basename = pathinfo($mainFile, PATHINFO_FILENAME);
-
-        // ── STEP 1: cross_reference.py ───────────────────────────────────────
-        // Merge all files, deduplicate on the full dataset, validate, enrich
-        Log::info('[Pipeline] Step 1: cross_reference.py', [
-            'main'  => $mainFile,
-            'refs'  => $referenceFiles,
-        ]);
-
-        $crossRefResult = $this->runCrossReference(
-            $mainFile, $referenceFiles, $mergedDir, $options
-        );
-
-        // The merged+validated file becomes the input for cleaning
-        $mergedFile = $crossRefResult['output_csv']
-            ?? ($mergedDir . '/' . $basename . '_CLEANED_ENRICHED.csv');
-
-        if (!file_exists($mergedFile)) {
-            // Fallback: cross_reference may have used a different naming pattern
-            $candidates = glob($mergedDir . '/*ENRICHED*.csv') ?: glob($mergedDir . '/*.csv');
-            if (!empty($candidates)) {
-                $mergedFile = $candidates[0];
-            } else {
-                // No reference files — use main file directly
-                $mergedFile = $mainFile;
-            }
+        $userId    = Auth::id() ?? 'shared';
+        $pass1Dir  = $this->sharedDataPath . '/cleaned/'  . $userId;   // après pass 1
+        $crossDir  = $this->sharedDataPath . '/merged/'   . $userId;   // après cross-ref
+        $finalDir  = $this->sharedDataPath . '/results/'  . $userId;   // après pass 2
+        foreach ([$pass1Dir, $crossDir, $finalDir] as $dir) {
+            $this->ensureDir($dir);
         }
 
-        // ── STEP 2: data_cleaner.py ──────────────────────────────────────────
-        // Sanitize dates, prices, negatives on the merged+deduped dataset
-        Log::info('[Pipeline] Step 2: data_cleaner.py', ['input' => $mergedFile]);
+        // ── PASS 1 : clean each file individually ────────────────────────────
+        Log::info('[Pipeline] Pass 1 — clean individual files');
 
-        $cleanResult = $this->cleanFile($mergedFile, $cleanedDir, $options);
+        $mainPass1 = $this->cleanFile($mainFile, $pass1Dir, $options);
+        $mainPass1Path = $mainPass1['cleaned_file_path']
+            ?? ($pass1Dir . '/' . pathinfo($mainFile, PATHINFO_FILENAME) . '_CLEANED.csv');
 
-        // ── Build final result ────────────────────────────────────────────────
-        $cleanedFile = $cleanedDir . '/' . pathinfo($mergedFile, PATHINFO_FILENAME) . '_CLEANED.csv';
+        $refPass1Paths = [];
+        foreach ($referenceFiles as $refFile) {
+            $refCleaned      = $this->cleanFile($refFile, $pass1Dir, $options);
+            $refPass1Paths[] = $refCleaned['cleaned_file_path']
+                ?? ($pass1Dir . '/' . pathinfo($refFile, PATHINFO_FILENAME) . '_CLEANED.csv');
+        }
 
+        // ── PASS 2 : cross-reference on cleaned files ────────────────────────
+        Log::info('[Pipeline] Pass 2 — cross-reference', [
+            'main' => $mainPass1Path,
+            'refs' => $refPass1Paths,
+        ]);
+
+        $crossResult    = $this->runCrossReference($mainPass1Path, $refPass1Paths, $crossDir, $options);
+        $mergedFilePath = $crossResult['output_csv'] ?? null;
+
+        // ── PASS 3 : re-clean the merged file ───────────────────────────────
+        // Seulement si un fichier mergé a été produit
+        $finalResult = null;
+        $finalPath   = null;
+
+        if ($mergedFilePath && file_exists($mergedFilePath)) {
+            Log::info('[Pipeline] Pass 3 — re-clean merged file', ['file' => $mergedFilePath]);
+            $finalResult = $this->cleanFile($mergedFilePath, $finalDir, $options);
+            $finalPath   = $finalResult['cleaned_file_path'] ?? null;
+        } else {
+            // Pas de merge (fichier unique) — le résultat de pass 1 est le final
+            Log::info('[Pipeline] Pass 3 — skipped (no merged file), using pass 1 output');
+            $finalPath = $mainPass1Path;
+        }
+
+        // ── Build result ─────────────────────────────────────────────────────
         $result = [
-            'status'               => 'success',
-            'step1_cross_ref'      => $crossRefResult,
-            'step2_cleaned'        => $cleanResult,
-            'merged_file'          => $mergedFile,
-            'cleaned_file_path'    => file_exists($cleanedFile) ? $cleanedFile : ($cleanResult['output_file'] ?? null),
-            'report_file'          => $crossRefResult['output_report'] ?? null,
-            'initial_rows'         => $crossRefResult['final_rows']    ?? 0,
-            'final_rows'           => $cleanResult['rows']             ?? 0,
-            'final_cols'           => $cleanResult['columns']          ?? 0,
-            'null_remaining'       => $cleanResult['null_remaining']   ?? 0,
-            'dedup_after_merge'    => $crossRefResult['rapport']['dedup_after_merge'] ?? 0,
+            'status'            => 'success',
+            'pass1_cleaned'     => $mainPass1,
+            'pass2_cross_ref'   => $crossResult,
+            'pass3_final'       => $finalResult,
+            'cleaned_file_path' => $mainPass1Path,    // fichier nettoyé seul (pass 1)
+            'enriched_file'     => $mergedFilePath,   // fichier mergé (pass 2)
+            'final_file'        => $finalPath,        // fichier final re-nettoyé (pass 3)
+            'report_file'       => $crossResult['output_report'] ?? null,
+            'final_rows'        => $finalResult['rows']            ?? ($crossResult['final_rows']    ?? 0),
+            'final_cols'        => $finalResult['columns']         ?? ($crossResult['final_cols']    ?? 0),
+            'null_remaining'    => $finalResult['null_remaining']  ?? ($crossResult['null_remaining'] ?? 0),
         ];
 
-        // Permissions
-        foreach (['cleaned_file_path', 'merged_file', 'report_file'] as $key) {
+        foreach (['cleaned_file_path', 'enriched_file', 'final_file', 'report_file'] as $key) {
             if (!empty($result[$key]) && file_exists($result[$key])) {
                 @chmod($result[$key], 0666);
             }
         }
 
-        Log::info('[Pipeline] Full pipeline complete', $result);
+        Log::info('[Pipeline] Full pipeline complete — 3 passes done', $result);
         return $result;
     }
 
     // =========================================================================
-    // CROSS-REFERENCE ONLY — cross_reference.py
+    // CROSS-REFERENCE ONLY
     // =========================================================================
 
     public function crossReferenceOnly(string $cleanedFile, array $referenceFiles, array $options = []): array
@@ -223,16 +226,12 @@ class DataCleaningService
             $command[] = '--no-llm-enricher';
         }
 
-        Log::info('[CrossRef] Running', ['main' => $pythonMain, 'refs' => $pythonRefs]);
-
         $process = new Process($command);
         $process->setTimeout(3600);
 
         try {
             $process->mustRun();
-            $result = $this->parseJsonOutput($process->getOutput());
-            Log::info('[CrossRef] Done', $result);
-            return $result;
+            return $this->parseJsonOutput($process->getOutput());
         } catch (ProcessFailedException $e) {
             $err = $process->getErrorOutput() ?: $process->getOutput();
             Log::error('[CrossRef] Failed', ['error' => $err]);
@@ -244,9 +243,6 @@ class DataCleaningService
     // HELPERS
     // =========================================================================
 
-    /**
-     * Build the base docker exec command with env vars injected.
-     */
     protected function baseDockerCommand(array $pythonCommand): array
     {
         return array_merge([
@@ -257,9 +253,6 @@ class DataCleaningService
         ], $pythonCommand);
     }
 
-    /**
-     * Resolve a storage-relative or absolute path to a real filesystem path.
-     */
     protected function resolvePath(string $pathOrStorage): string
     {
         if (file_exists($pathOrStorage)) {
@@ -272,9 +265,6 @@ class DataCleaningService
         return $disk->path($pathOrStorage);
     }
 
-    /**
-     * Convert a host path to its Docker container equivalent (/shared_data/...).
-     */
     protected function toDockerPath(string $path): string
     {
         if (str_starts_with($path, '/shared_data')) {
@@ -287,9 +277,6 @@ class DataCleaningService
         );
     }
 
-    /**
-     * Parse JSON from Python stdout — searches from end of output for robustness.
-     */
     protected function parseJsonOutput(string $stdout): array
     {
         $lines = array_filter(array_map('trim', explode("\n", $stdout)));
@@ -301,7 +288,6 @@ class DataCleaningService
             }
         }
 
-        // Regex fallback for multi-line JSON
         if (preg_match('/(\{(?:[^{}]|(?R))*\})/s', $stdout, $m)) {
             $decoded = json_decode($m[1], true);
             if (json_last_error() === JSON_ERROR_NONE) {
@@ -309,7 +295,6 @@ class DataCleaningService
             }
         }
 
-        // Text fallback
         if (preg_match('/(success|Sanitize done|PIPELINE TERMINE)/i', $stdout)) {
             return ['status' => 'success', 'message' => 'Processing completed', 'rows' => 0, 'columns' => 0];
         }
