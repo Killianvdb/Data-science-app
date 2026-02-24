@@ -772,7 +772,20 @@ def main():
     try:
         cleaner  = DataCleaner(input_file, use_llm=use_llm, column_types=column_types)
         df_clean = cleaner.clean()
-        df_clean.to_csv(output_file, index=False, quoting=csv.QUOTE_MINIMAL)
+
+        # Save in the format matching the output file extension
+        out_ext = os.path.splitext(output_file)[-1].lower()
+        if out_ext in ('.xlsx', '.xls'):
+            df_clean.to_excel(output_file, index=False, engine='openpyxl')
+        elif out_ext == '.json':
+            df_clean.to_json(output_file, orient='records', indent=2, force_ascii=False)
+        elif out_ext == '.xml':
+            df_clean.to_xml(output_file, index=False)
+        elif out_ext == '.txt':
+            df_clean.to_csv(output_file, index=False, sep='\t', quoting=csv.QUOTE_MINIMAL)
+        else:
+            # Default: CSV
+            df_clean.to_csv(output_file, index=False, quoting=csv.QUOTE_MINIMAL)
 
         result = {
             'status':        'success',

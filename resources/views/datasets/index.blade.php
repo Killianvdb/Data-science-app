@@ -437,6 +437,7 @@
                         <div style="font-size:12px;color:#aaa;margin-top:2px;">The AI fills in missing values based on surrounding rows. Disable for faster processing.</div>
                     </div>
                 </div>
+
             </div>
         </div>
 
@@ -921,7 +922,7 @@ function showResults(json){
     resStats.innerHTML=chips.join('');
 
     var btns=[];
-    if(u.cleaned)    btns.push(dlBtn('Cleaned CSV',  u.cleaned,    'p'));
+    if(u.cleaned)    btns.push(dlBtn('Cleaned File',  u.cleaned,    'p'));
     if(u.enriched)   btns.push(dlBtn('Enriched CSV', u.enriched,   'p'));
     if(u.report_pdf) btns.push(dlBtn('PDF Report',   u.report_pdf, 'g'));
     if(u.report)     btns.push(dlBtn('JSON Report',  u.report,     's'));

@@ -39,7 +39,8 @@ class ProcessPipelineJob implements ShouldQueue
             if ($this->pipelineMode === 'clean_only' || empty($this->referenceFiles)) {
                 $result = $cleaningService->cleanUploadedFile(
                     $this->mainFilePath,
-                    $this->options
+                    $this->options,
+                    $this->userId
                 );
             } else {
                 // ── Step: cross referencing ───────────────────────────────────
@@ -48,7 +49,8 @@ class ProcessPipelineJob implements ShouldQueue
                 $result = $cleaningService->runFullPipeline(
                     $this->mainFilePath,
                     $this->referenceFiles,
-                    $this->options
+                    $this->options,
+                    $this->userId
                 );
 
                 // ── Step: enriching (already done inside runFullPipeline) ─────
