@@ -10,9 +10,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\AiChatController;
+use App\Http\Controllers\ConvertController;
 use App\Http\Controllers\CsvImportController;
-
-
 
 
 /*
@@ -47,13 +46,18 @@ Route::prefix('ai-chat')->name('ai-chat.')->group(function () {
 Route::middleware('auth')->group(function () {
 
 
-    Route::get('/csv/import', [CsvImportController::class, 'form'])->name('csv.form');
-    Route::post('/csv/import', [CsvImportController::class, 'import'])->name('csv.import');
+    Route::get('/import', [CsvImportController::class, 'form'])->name('csv.form');
+    Route::post('/import', [CsvImportController::class, 'import'])->name('csv.import');
+    Route::get('/dashboard', [CsvImportController::class, 'dashboard'])->name('csv.dashboard');
 
     // Visualization Routes
     Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
     Route::post('/visualise/generate', [VisualizationController::class, 'generate'])->name('visualise.generate');
     Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show');
+
+    //Converter page
+    Route::get('/convert', [ConvertController::class, 'index'])->name('convert.index');
+    Route::post('/convert', [ConvertController::class, 'convert'])->name('convert.convert');
 
     // Profile Management
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
