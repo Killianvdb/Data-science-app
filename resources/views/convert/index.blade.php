@@ -3,7 +3,6 @@
     <x-slot name="header">
         <div class="space-y-1">
             <h2 class="font-semibold text-2xl text-gray-900 leading-tight">Convert CSV</h2>
-            <p class="text-sm text-gray-500">Upload CSV en kies output-formaat. Resultaat verschijnt hieronder.</p>
         </div>
     </x-slot>
 
@@ -14,6 +13,8 @@
                 @csrf
 
                 <div>
+            <h5 class="text-sm text-gray-500">Upload CSV en kies output-formaat. Resultaat verschijnt hieronder.</h5>
+
                     <label class="block text-sm font-medium text-gray-700 mb-2">CSV bestand</label>
 
                     <input

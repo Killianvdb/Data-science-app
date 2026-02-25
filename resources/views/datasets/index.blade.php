@@ -1,4 +1,4 @@
-<x-app-layout>
+<x-app-layout :title="'Upload Dataset'">
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -249,256 +249,259 @@
 
 </style>
 
-<div class="up">
+    <x-slot name="header">
+        <div class="space-y-1">
+            <h2 class="font-semibold text-2xl text-gray-900 leading-tight">Upload Dataset</h2>
+        </div>
+    </x-slot>
 
-    {{-- Header --}}
-    <div style="margin-bottom:24px;">
-        <h1 style="font-size:24px;font-weight:700;color:#111;margin:0 0 4px;font-family:'Sora',sans-serif;">Upload Dataset</h1>
-        <p style="font-size:14px;color:#aaa;margin:0;font-family:'Sora',sans-serif;">Clean, validate and enrich your data with AI.</p>
-    </div>
 
-    @if(session('success'))
-    <div style="margin-bottom:12px;padding:12px 16px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;font-size:13px;color:#15803d;font-family:'Sora',sans-serif;">
-        {{ session('success') }}
-    </div>
-    @endif
+    <div class="up">
+        @if(session('success'))
+        <div style="margin-bottom:12px;padding:12px 16px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;font-size:13px;color:#15803d;font-family:'Sora',sans-serif;">
+            {{ session('success') }}
+        </div>
+        @endif
 
-    <form id="uploadForm" enctype="multipart/form-data" novalidate>
-        @csrf
+        <form id="uploadForm" enctype="multipart/form-data" novalidate>
+            @csrf
 
-        {{-- ── CARD 1: Main file ── --}}
-        <div class="card">
-            <p class="sec-label">Main file</p>
+            {{-- ── CARD 1: Main file ── --}}
+            <div class="card">
+                <p class="sec-label">Main file</p>
 
-            <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="Upload file">
-                <input type="file" id="fileInput" name="file" accept=".xlsx,.xls,.csv,.txt,.json,.xml">
+                <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="Upload file">
+                    <input type="file" id="fileInput" name="file" accept=".xlsx,.xls,.csv,.txt,.json,.xml">
 
-                <div id="dz-default" style="text-align:center;pointer-events:none;user-select:none;">
-                    <svg width="28" height="28" fill="none" stroke="#bfdbfe" stroke-width="1.5" viewBox="0 0 24 24" style="margin:0 auto 8px;display:block;">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
-                    </svg>
-                    <p style="font-size:13px;color:#555;margin:0;"><span style="color:#2563eb;font-weight:600;">Click to upload</span> or drag &amp; drop</p>
-                    <p class="mono" style="font-size:11px;color:#bbb;margin:4px 0 0;">{{ implode(' · ', $supportedFormats) }} · max 20 MB</p>
-                </div>
+                    <div id="dz-default" style="text-align:center;pointer-events:none;user-select:none;">
+                        <svg width="28" height="28" fill="none" stroke="#bfdbfe" stroke-width="1.5" viewBox="0 0 24 24" style="margin:0 auto 8px;display:block;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+                        </svg>
+                        <p style="font-size:13px;color:#555;margin:0;"><span style="color:#2563eb;font-weight:600;">Click to upload</span> or drag &amp; drop</p>
+                        <p class="mono" style="font-size:11px;color:#bbb;margin:4px 0 0;">{{ implode(' · ', $supportedFormats) }} · max 20 MB</p>
+                    </div>
 
-                <div id="dz-selected" style="display:none;text-align:center;pointer-events:none;user-select:none;">
-                    <svg width="22" height="22" fill="none" stroke="#2563eb" stroke-width="2" viewBox="0 0 24 24" style="margin:0 auto 6px;display:block;">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
-                    </svg>
-                    <p class="mono" style="font-size:13px;font-weight:500;color:#1e40af;margin:0;" id="dz-filename"></p>
-                    <p class="mono" style="font-size:11px;color:#93c5fd;margin:3px 0 0;" id="dz-filesize"></p>
+                    <div id="dz-selected" style="display:none;text-align:center;pointer-events:none;user-select:none;">
+                        <svg width="22" height="22" fill="none" stroke="#2563eb" stroke-width="2" viewBox="0 0 24 24" style="margin:0 auto 6px;display:block;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+                        </svg>
+                        <p class="mono" style="font-size:13px;font-weight:500;color:#1e40af;margin:0;" id="dz-filename"></p>
+                        <p class="mono" style="font-size:11px;color:#93c5fd;margin:3px 0 0;" id="dz-filesize"></p>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        {{-- ── CARD 3: Reference files (only shown in full pipeline mode) ── --}}
-        <div class="card" id="refCard" style="display:none;">
-            <p class="sec-label">Reference files</p>
-            <p class="fh" style="margin-bottom:10px;">Products catalogue, customer list, lookup tables — used for cross-referencing and enrichment.</p>
+            {{-- ── CARD 3: Reference files (only shown in full pipeline mode) ── --}}
+            <div class="card" id="refCard" style="display:none;">
+                <p class="sec-label">Reference files</p>
+                <p class="fh" style="margin-bottom:10px;">Products catalogue, customer list, lookup tables — used for cross-referencing and enrichment.</p>
 
-            <label class="ref-add-btn">
-                <input type="file" id="refPicker" accept=".xlsx,.xls,.csv" multiple style="position:absolute;inset:0;opacity:0;cursor:pointer;">
-                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                <label class="ref-add-btn">
+                    <input type="file" id="refPicker" accept=".xlsx,.xls,.csv" multiple style="position:absolute;inset:0;opacity:0;cursor:pointer;">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                    </svg>
+                    Add reference file
+                </label>
+
+                <div class="ref-chips" id="refChips"></div>
+                <div id="refHidden"></div>
+            </div>
+
+            {{-- ── Preview card (shown after file selected) ── --}}
+            <div id="previewCard" class="card preview-card" style="display:none;margin-bottom:12px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                    <p class="sec-label" style="margin:0;">File preview</p>
+                    <span style="font-size:11px;color:#94a3b8;">First 5 rows · set column types below headers</span>
+                </div>
+                <div class="preview-table-wrap">
+                    <table class="preview-table" id="previewTable"></table>
+                </div>
+                <p style="font-size:11.5px;color:#94a3b8;margin:10px 0 0;">
+                    ℹ️ Leave on <b>Auto-detect</b> unless the pipeline misidentifies a column type.
+                </p>
+            </div>
+
+            {{-- ── CARD 2: Pipeline mode selector ── --}}
+            <input type="hidden" name="pipeline_mode" id="pipelineMode" value="clean_only">
+            <div class="card">
+                <p class="sec-label">Pipeline mode</p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+
+                    <div class="mode-btn selected" id="btn-clean" onclick="setMode('clean_only')">
+                        <div class="mode-btn-icon" id="icon-clean">
+                            <svg width="18" height="18" fill="none" stroke="#2563eb" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.3 24.3 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21a48.25 48.25 0 01-8.135-.687c-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"/>
+                            </svg>
+                        </div>
+                        <div class="mode-btn-title">Clean only</div>
+                        <div class="mode-btn-desc">Standardise dates, prices and formats. Fast, no merging.</div>
+                    </div>
+
+                    <div class="mode-btn" id="btn-full" onclick="setMode('full_pipeline')">
+                        <div class="mode-btn-icon" id="icon-full">
+                            <svg width="18" height="18" fill="none" stroke="#2563eb" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z"/>
+                            </svg>
+                        </div>
+                        <div class="mode-btn-title">Full pipeline</div>
+                        <div class="mode-btn-desc">Merge reference files, deduplicate, validate, enrich and clean.</div>
+                    </div>
+
+                </div>
+            </div>
+
+            {{-- ── CARD 4: Dataset context (collapsible) ── --}}
+            <div class="card">
+                <button type="button" class="ctx-toggle" id="ctxToggle">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:32px;height:32px;border-radius:10px;background:#eff6ff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="15" height="15" fill="none" stroke="#3b82f6" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-size:13px;font-weight:600;color:#1a1a1a;">Dataset context</div>
+                            <div style="font-size:11.5px;color:#aaa;margin-top:1px;">Help the AI make smarter decisions</div>
+                        </div>
+                    </div>
+                    <div class="ctx-arrow" id="ctxArrow">
+                        <svg width="12" height="12" fill="none" stroke="#888" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </div>
+                </button>
+
+                <div id="ctxPanel" style="display:none;margin-top:20px;">
+                    <div class="divider" style="margin-top:0;"></div>
+
+                    <div style="margin-bottom:16px;">
+                        <label class="fl">What is this dataset about?</label>
+                        <p class="fh">Domain context helps the AI understand whether values are valid — e.g. can a temperature be negative?</p>
+                        <textarea name="dataset_description" rows="2" maxlength="1000"
+                                placeholder="e.g. Monthly sales orders with product SKUs and customer details from our ERP system"
+                                class="u-textarea"></textarea>
+                    </div>
+
+                    <div style="margin-bottom:16px;">
+                        <label class="fl">Columns that must always be positive</label>
+                        <p class="fh">Negative values will be auto-corrected (sign error assumed).</p>
+                        <div id="nnCont" style="display:flex;flex-direction:column;gap:6px;">
+                            <div style="display:flex;gap:6px;align-items:center;">
+                                <input type="text" name="no_negative_cols[]" placeholder="e.g. quantity, unit_price" maxlength="100" class="u-input">
+                                <button type="button" class="add-row-btn" onclick="addTxtRow('nnCont','no_negative_cols[]','e.g. stock_count')">+ Add</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:16px;">
+                        <label class="fl">Unique identifier columns</label>
+                        <p class="fh">IDs, emails, codes — never imputed or modified by the pipeline.</p>
+                        <div id="idCont" style="display:flex;flex-direction:column;gap:6px;">
+                            <div style="display:flex;gap:6px;align-items:center;">
+                                <input type="text" name="identifier_cols[]" placeholder="e.g. customer_id, order_id" maxlength="100" class="u-input">
+                                <button type="button" class="add-row-btn" onclick="addTxtRow('idCont','identifier_cols[]','e.g. sku, product_code')">+ Add</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:4px;">
+                        <label class="fl">Known valid ranges</label>
+                        <p class="fh">Values outside these ranges are flagged for review. e.g. age: 0–120</p>
+                        <div id="rangeCont" style="display:flex;flex-direction:column;gap:6px;">
+                            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                                <input type="text"   name="range_rules[0][column]" placeholder="Column" maxlength="100" style="flex:2;min-width:80px;" class="u-input">
+                                <span style="font-size:11px;color:#bbb;">min</span>
+                                <input type="number" name="range_rules[0][min]" placeholder="0"   style="flex:1;min-width:58px;" class="u-input">
+                                <span style="font-size:11px;color:#bbb;">max</span>
+                                <input type="number" name="range_rules[0][max]" placeholder="100" style="flex:1;min-width:58px;" class="u-input">
+                                <button type="button" class="add-row-btn" onclick="addRangeRow()">+ Add</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <div class="sw-row">
+                        <label class="sw"><input type="checkbox" id="flag_only" name="flag_only" value="1"><span class="sw-track"></span></label>
+                        <div>
+                            <div style="font-size:13px;font-weight:500;color:#1a1a1a;cursor:pointer;" onclick="document.getElementById('flag_only').click()">Flag only — never auto-correct</div>
+                            <div style="font-size:12px;color:#aaa;margin-top:2px;">Suspicious values are flagged for human review instead of being automatically fixed.</div>
+                        </div>
+                    </div>
+
+                    <div class="sw-row">
+                        <label class="sw"><input type="checkbox" id="use_llm_enricher" name="use_llm_enricher" value="1" checked><span class="sw-track"></span></label>
+                        <div>
+                            <div style="font-size:13px;font-weight:500;color:#1a1a1a;cursor:pointer;" onclick="document.getElementById('use_llm_enricher').click()">Use AI to predict missing values</div>
+                            <div style="font-size:12px;color:#aaa;margin-top:2px;">The AI fills in missing values based on surrounding rows. Disable for faster processing.</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            {{-- ── Submit ── --}}
+            <div class="submit-row">
+                <p style="font-size:12px;color:#bbb;margin:0;font-family:'Sora',sans-serif;">
+                    @if(isset($planSlug) && $planSlug === 'pro')
+                        <span style="color:#2563eb;font-weight:600;">Pro</span> · 20 MB max
+                    @else
+                        Free plan · <a href="#" style="color:#2563eb;font-weight:500;text-decoration:none;">upgrade</a> for larger files
+                    @endif
+                </p>
+                <button type="submit" class="btn-submit" id="submitBtn">
+                    <span id="submitLabel">Process file</span>
+                    <svg id="submitSpinner" class="spin" style="display:none;width:15px;height:15px;" fill="none" viewBox="0 0 24 24">
+                        <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3.5"/>
+                        <path style="opacity:.9" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                </button>
+            </div>
+        </form>
+
+
+        {{-- Progress bar (shown while processing) --}}
+        <div id="progressWrap" class="progress-wrap" style="display:none;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+                <svg class="spin" width="14" height="14" fill="none" viewBox="0 0 24 24" style="flex-shrink:0;">
+                    <circle style="opacity:.2" cx="12" cy="12" r="10" stroke="#2563eb" stroke-width="3.5"/>
+                    <path style="opacity:.9" fill="#2563eb" d="M4 12a8 8 0 018-8v8H4z"/>
                 </svg>
-                Add reference file
-            </label>
-
-            <div class="ref-chips" id="refChips"></div>
-            <div id="refHidden"></div>
+                <span class="progress-step-label" id="progressLabel">Starting…</span>
+            </div>
+            <div class="progress-track">
+                <div class="progress-fill" id="progressFill" style="width:5%"></div>
+            </div>
+            <span class="progress-pct-label" id="progressPct">5%</span>
+            <div style="clear:both;"></div>
         </div>
 
-        {{-- ── Preview card (shown after file selected) ── --}}
-        <div id="previewCard" class="card preview-card" style="display:none;margin-bottom:12px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-                <p class="sec-label" style="margin:0;">File preview</p>
-                <span style="font-size:11px;color:#94a3b8;">First 5 rows · set column types below headers</span>
-            </div>
-            <div class="preview-table-wrap">
-                <table class="preview-table" id="previewTable"></table>
-            </div>
-            <p style="font-size:11.5px;color:#94a3b8;margin:10px 0 0;">
-                ℹ️ Leave on <b>Auto-detect</b> unless the pipeline misidentifies a column type.
-            </p>
-        </div>
-
-        {{-- ── CARD 2: Pipeline mode selector ── --}}
-        <input type="hidden" name="pipeline_mode" id="pipelineMode" value="clean_only">
-        <div class="card">
-            <p class="sec-label">Pipeline mode</p>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-
-                <div class="mode-btn selected" id="btn-clean" onclick="setMode('clean_only')">
-                    <div class="mode-btn-icon" id="icon-clean">
-                        <svg width="18" height="18" fill="none" stroke="#2563eb" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.3 24.3 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21a48.25 48.25 0 01-8.135-.687c-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"/>
-                        </svg>
-                    </div>
-                    <div class="mode-btn-title">Clean only</div>
-                    <div class="mode-btn-desc">Standardise dates, prices and formats. Fast, no merging.</div>
-                </div>
-
-                <div class="mode-btn" id="btn-full" onclick="setMode('full_pipeline')">
-                    <div class="mode-btn-icon" id="icon-full">
-                        <svg width="18" height="18" fill="none" stroke="#2563eb" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z"/>
-                        </svg>
-                    </div>
-                    <div class="mode-btn-title">Full pipeline</div>
-                    <div class="mode-btn-desc">Merge reference files, deduplicate, validate, enrich and clean.</div>
-                </div>
-
-            </div>
-        </div>
-
-        {{-- ── CARD 4: Dataset context (collapsible) ── --}}
-        <div class="card">
-            <button type="button" class="ctx-toggle" id="ctxToggle">
-                <div style="display:flex;align-items:center;gap:10px;">
-                    <div style="width:32px;height:32px;border-radius:10px;background:#eff6ff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                        <svg width="15" height="15" fill="none" stroke="#3b82f6" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"/>
-                        </svg>
-                    </div>
-                    <div>
-                        <div style="font-size:13px;font-weight:600;color:#1a1a1a;">Dataset context</div>
-                        <div style="font-size:11.5px;color:#aaa;margin-top:1px;">Help the AI make smarter decisions</div>
-                    </div>
-                </div>
-                <div class="ctx-arrow" id="ctxArrow">
-                    <svg width="12" height="12" fill="none" stroke="#888" stroke-width="2.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                    </svg>
-                </div>
-            </button>
-
-            <div id="ctxPanel" style="display:none;margin-top:20px;">
-                <div class="divider" style="margin-top:0;"></div>
-
-                <div style="margin-bottom:16px;">
-                    <label class="fl">What is this dataset about?</label>
-                    <p class="fh">Domain context helps the AI understand whether values are valid — e.g. can a temperature be negative?</p>
-                    <textarea name="dataset_description" rows="2" maxlength="1000"
-                              placeholder="e.g. Monthly sales orders with product SKUs and customer details from our ERP system"
-                              class="u-textarea"></textarea>
-                </div>
-
-                <div style="margin-bottom:16px;">
-                    <label class="fl">Columns that must always be positive</label>
-                    <p class="fh">Negative values will be auto-corrected (sign error assumed).</p>
-                    <div id="nnCont" style="display:flex;flex-direction:column;gap:6px;">
-                        <div style="display:flex;gap:6px;align-items:center;">
-                            <input type="text" name="no_negative_cols[]" placeholder="e.g. quantity, unit_price" maxlength="100" class="u-input">
-                            <button type="button" class="add-row-btn" onclick="addTxtRow('nnCont','no_negative_cols[]','e.g. stock_count')">+ Add</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="margin-bottom:16px;">
-                    <label class="fl">Unique identifier columns</label>
-                    <p class="fh">IDs, emails, codes — never imputed or modified by the pipeline.</p>
-                    <div id="idCont" style="display:flex;flex-direction:column;gap:6px;">
-                        <div style="display:flex;gap:6px;align-items:center;">
-                            <input type="text" name="identifier_cols[]" placeholder="e.g. customer_id, order_id" maxlength="100" class="u-input">
-                            <button type="button" class="add-row-btn" onclick="addTxtRow('idCont','identifier_cols[]','e.g. sku, product_code')">+ Add</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="margin-bottom:4px;">
-                    <label class="fl">Known valid ranges</label>
-                    <p class="fh">Values outside these ranges are flagged for review. e.g. age: 0–120</p>
-                    <div id="rangeCont" style="display:flex;flex-direction:column;gap:6px;">
-                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-                            <input type="text"   name="range_rules[0][column]" placeholder="Column" maxlength="100" style="flex:2;min-width:80px;" class="u-input">
-                            <span style="font-size:11px;color:#bbb;">min</span>
-                            <input type="number" name="range_rules[0][min]" placeholder="0"   style="flex:1;min-width:58px;" class="u-input">
-                            <span style="font-size:11px;color:#bbb;">max</span>
-                            <input type="number" name="range_rules[0][max]" placeholder="100" style="flex:1;min-width:58px;" class="u-input">
-                            <button type="button" class="add-row-btn" onclick="addRangeRow()">+ Add</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="divider"></div>
-
-                <div class="sw-row">
-                    <label class="sw"><input type="checkbox" id="flag_only" name="flag_only" value="1"><span class="sw-track"></span></label>
-                    <div>
-                        <div style="font-size:13px;font-weight:500;color:#1a1a1a;cursor:pointer;" onclick="document.getElementById('flag_only').click()">Flag only — never auto-correct</div>
-                        <div style="font-size:12px;color:#aaa;margin-top:2px;">Suspicious values are flagged for human review instead of being automatically fixed.</div>
-                    </div>
-                </div>
-
-                <div class="sw-row">
-                    <label class="sw"><input type="checkbox" id="use_llm_enricher" name="use_llm_enricher" value="1" checked><span class="sw-track"></span></label>
-                    <div>
-                        <div style="font-size:13px;font-weight:500;color:#1a1a1a;cursor:pointer;" onclick="document.getElementById('use_llm_enricher').click()">Use AI to predict missing values</div>
-                        <div style="font-size:12px;color:#aaa;margin-top:2px;">The AI fills in missing values based on surrounding rows. Disable for faster processing.</div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-
-        {{-- ── Submit ── --}}
-        <div class="submit-row">
-            <p style="font-size:12px;color:#bbb;margin:0;font-family:'Sora',sans-serif;">
-                @if(isset($planSlug) && $planSlug === 'pro')
-                    <span style="color:#2563eb;font-weight:600;">Pro</span> · 20 MB max
-                @else
-                    Free plan · <a href="#" style="color:#2563eb;font-weight:500;text-decoration:none;">upgrade</a> for larger files
-                @endif
-            </p>
-            <button type="submit" class="btn-submit" id="submitBtn">
-                <span id="submitLabel">Process file</span>
-                <svg id="submitSpinner" class="spin" style="display:none;width:15px;height:15px;" fill="none" viewBox="0 0 24 24">
-                    <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3.5"/>
-                    <path style="opacity:.9" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+        {{-- ── Results ── --}}
+        <div id="resultsPanel" style="display:none;margin-top:12px;" class="card">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+                <svg width="18" height="18" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
-            </button>
+                <span style="font-size:14px;font-weight:600;color:#111;font-family:'Sora',sans-serif;">Processing complete</span>
+            </div>
+            <div class="chips-row" id="resultStats"></div>
+            <div class="dl-row" id="dlButtons"></div>
+            <div id="ctxNotice" style="display:none;margin-top:12px;font-size:12px;color:#1d4ed8;background:#eff6ff;border-radius:8px;padding:8px 12px;font-family:'Sora',sans-serif;">
+                ✓ Custom validation rules were generated from your dataset context.
+            </div>
         </div>
-    </form>
 
+        {{-- ── Error ── --}}
+        <div id="errorPanel" style="display:none;margin-top:12px;padding:14px 16px;background:#fff1f2;border:1.5px solid #fecdd3;border-radius:14px;font-family:'Sora',sans-serif;">
+            <p style="font-size:13px;font-weight:600;color:#be123c;margin:0 0 3px;">Processing error</p>
+            <p id="errorMsg" style="font-size:13px;color:#e11d48;margin:0;"></p>
+        </div>
 
-    {{-- Progress bar (shown while processing) --}}
-    <div id="progressWrap" class="progress-wrap" style="display:none;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
-            <svg class="spin" width="14" height="14" fill="none" viewBox="0 0 24 24" style="flex-shrink:0;">
-                <circle style="opacity:.2" cx="12" cy="12" r="10" stroke="#2563eb" stroke-width="3.5"/>
-                <path style="opacity:.9" fill="#2563eb" d="M4 12a8 8 0 018-8v8H4z"/>
-            </svg>
-            <span class="progress-step-label" id="progressLabel">Starting…</span>
-        </div>
-        <div class="progress-track">
-            <div class="progress-fill" id="progressFill" style="width:5%"></div>
-        </div>
-        <span class="progress-pct-label" id="progressPct">5%</span>
-        <div style="clear:both;"></div>
     </div>
 
-    {{-- ── Results ── --}}
-    <div id="resultsPanel" style="display:none;margin-top:12px;" class="card">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
-            <svg width="18" height="18" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            <span style="font-size:14px;font-weight:600;color:#111;font-family:'Sora',sans-serif;">Processing complete</span>
-        </div>
-        <div class="chips-row" id="resultStats"></div>
-        <div class="dl-row" id="dlButtons"></div>
-        <div id="ctxNotice" style="display:none;margin-top:12px;font-size:12px;color:#1d4ed8;background:#eff6ff;border-radius:8px;padding:8px 12px;font-family:'Sora',sans-serif;">
-            ✓ Custom validation rules were generated from your dataset context.
-        </div>
-    </div>
+</x-app-layout>
 
-    {{-- ── Error ── --}}
-    <div id="errorPanel" style="display:none;margin-top:12px;padding:14px 16px;background:#fff1f2;border:1.5px solid #fecdd3;border-radius:14px;font-family:'Sora',sans-serif;">
-        <p style="font-size:13px;font-weight:600;color:#be123c;margin:0 0 3px;">Processing error</p>
-        <p id="errorMsg" style="font-size:13px;color:#e11d48;margin:0;"></p>
-    </div>
-
-</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -942,4 +945,3 @@ function showError(msg){
 })();
 </script>
 
-</x-app-layout>
