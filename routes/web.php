@@ -47,13 +47,10 @@ Route::middleware('auth')->group(function () {
 
     // Visualization Routes
     Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
-    Route::get('/visualise/from-cleaned/{filename}', [VisualizationController::class, 'fromCleaned'])->name('visualise.fromCleaned')->where('filename', '.+'); 
-
     Route::post('/visualise/generate', [VisualizationController::class, 'generate'])->name('visualise.generate');
     Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show');
-    
 
-    Route::get('/import/from-cleaned/{filename}', [CsvImportController::class, 'fromCleaned'])->name('csv.fromCleaned')->where('filename', '.+');
+    //Converter page
     Route::get('/convert', [ConvertController::class, 'index'])->name('convert.index');
     Route::post('/convert', [ConvertController::class, 'convert'])->name('convert.convert');
     Route::get('/convert/download/{job}/{file}', [ConvertController::class, 'download'])->whereUuid('job')->name('convert.download');

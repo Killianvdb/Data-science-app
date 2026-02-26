@@ -58,37 +58,6 @@ class ProcessPipelineJob implements ShouldQueue
             }
 
             // ── Step: generating PDF report ───────────────────────────────────
-            // For clean-only runs, synthesise a minimal report JSON on the fly
-            if (empty($result['report_file']) && !empty($result['cleaned_file_path'])) {
-                try {
-                    $cleanedPath  = $result['cleaned_file_path'];
-                    $reportDir    = '/shared_data/results/' . $this->userId;
-                    if (!is_dir($reportDir)) mkdir($reportDir, 0777, true);
-                    $reportFile   = $reportDir . '/' . pathinfo($cleanedPath, PATHINFO_FILENAME) . '_REPORT.json';
-
-                    $reportData = [
-                        'main_file'        => $this->mainFilePath,
-                        'pipeline_mode'    => 'clean_only',
-                        'initial_rows'     => $result['rows']           ?? 0,
-                        'final_rows'       => $result['rows']           ?? 0,
-                        'final_cols'       => $result['columns']        ?? 0,
-                        'null_remaining'   => $result['null_remaining'] ?? 0,
-                        'dedup_after_merge'=> 0,
-                        'ref_files'        => [],
-                        'cross_reference'  => [],
-                        'validation'       => [],
-                        'derived_columns'  => [],
-                        'enrichment'       => [],
-                        'column_nulls'     => [],
-                    ];
-                    file_put_contents($reportFile, json_encode($reportData, JSON_PRETTY_PRINT));
-                    $result['report_file'] = $reportFile;
-                    @chmod($reportFile, 0666);
-                } catch (\Exception $e) {
-                    Log::warning('[PipelineJob] Could not create clean-only report JSON', ['error' => $e->getMessage()]);
-                }
-            }
-
             $pdfUrl = null;
             if (!empty($result['report_file']) && file_exists($result['report_file'])) {
                 $job->setStep('generating_report');

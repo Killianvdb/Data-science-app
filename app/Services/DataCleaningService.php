@@ -67,13 +67,10 @@ class DataCleaningService
             $pythonOutput,
         ]);
 
-        // Pass options JSON as 3rd positional arg (use_llm + column_types + rules_file)
+        // Pass options JSON as 3rd positional arg (use_llm + column_types)
         $optionsJson = json_encode([
             'use_llm'      => true,
             'column_types' => $options['column_types'] ?? [],
-            'rules_file'   => isset($options['rules_file'])
-                ? $this->toDockerPath($options['rules_file'])
-                : null,
         ]);
         $command[] = $optionsJson;
 

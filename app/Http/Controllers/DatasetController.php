@@ -279,11 +279,7 @@ class DatasetController extends Controller
             abort(404, 'File not found.');
         }
 
-        // Strip the uniqid prefix (e.g. 699e03c361e056.86780355_7hSkTa_) from the download name
-        // Pattern: hex.hex_randomStr_ prefix before the original filename
-        $base  = basename($path);
-        $clean = preg_replace('/^[0-9a-f]+\.[0-9a-f]+_[A-Za-z0-9]+_(?:ref_)?/', '', $base);
-        $alias = $request->query('alias', $clean ?: $base);
+        $alias = $request->query('alias', basename($path));
         return response()->download($path, $alias);
     }
 
@@ -444,7 +440,6 @@ class DatasetController extends Controller
         if (!empty($contextFormData['identifier_cols']))                 return true;
         if (!empty($contextFormData['required_cols']))                   return true;
         if (!empty($contextFormData['range_rules']))                     return true;
-        if (!empty($contextFormData['flag_only']))                       return true;
         return false;
     }
 
