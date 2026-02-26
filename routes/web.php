@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\AiChatController;
 use App\Http\Controllers\ConvertController;
+use App\Http\Controllers\CsvImportController;
 
 
 /*
@@ -61,6 +62,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/upload', [UploadController::class, 'create'])->name('upload.create');
     Route::post('/upload', [UploadController::class, 'store'])->name('upload.store');
+    Route::get('/datasets/jobs/{id}/status', [DatasetController::class, 'jobStatus'])->name('datasets.job.status');
 
     Route::prefix('datasets')->name('datasets.')->group(function () {
         // Pages
