@@ -44,11 +44,6 @@ Route::prefix('ai-chat')->name('ai-chat.')->group(function () {
 });
 Route::middleware('auth')->group(function () {
 
-
-    Route::get('/import', [CsvImportController::class, 'form'])->name('csv.form');
-    Route::post('/import', [CsvImportController::class, 'import'])->name('csv.import');
-    Route::get('/dashboard', [CsvImportController::class, 'dashboard'])->name('csv.dashboard');
-
     // Visualization Routes
     Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
     Route::post('/visualise/generate', [VisualizationController::class, 'generate'])->name('visualise.generate');
@@ -57,6 +52,7 @@ Route::middleware('auth')->group(function () {
     //Converter page
     Route::get('/convert', [ConvertController::class, 'index'])->name('convert.index');
     Route::post('/convert', [ConvertController::class, 'convert'])->name('convert.convert');
+    Route::get('/convert/download/{job}/{file}', [ConvertController::class, 'download'])->whereUuid('job')->name('convert.download');
 
     // Profile Management
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
