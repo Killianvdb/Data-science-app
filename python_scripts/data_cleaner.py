@@ -28,7 +28,6 @@ warnings.filterwarnings('ignore')
 
 # ── Shared LLM client (single source of truth) ────────────────────────────────
 from llm_client import GeminiLLM, _safe_stderr
-from context_validator import ContextAwareValidator
 
 
 # ============================================================================
@@ -580,14 +579,12 @@ class DataCleaner:
 
     def __init__(self, file_path: str, use_llm: bool = True,
                  row_threshold: float = 0.5, col_threshold: float = 0.3,
-                 column_types: dict = None,
-                 rules_file: str = None):
+                 column_types: dict = None):
         self.file_path      = file_path
         self.use_llm        = use_llm
         self.row_threshold  = row_threshold
         self.col_threshold  = col_threshold
         self.column_types   = column_types or {}   # user overrides from frontend
-        self.rules_file     = rules_file
         self.df             = self._load_file(file_path)
         self.llm            = GeminiLLM() if use_llm else self._disabled_llm()
 
@@ -742,20 +739,6 @@ class DataCleaner:
                 pct = count / len(self.df) * 100
                 _safe_stderr(f"   • {col}: {count} ({pct:.1f}%)")
 
-        # 8. Apply context rules (flag_only / validation) if rules_file provided
-        if self.rules_file:
-            try:
-                _safe_stderr(f"\n🔍 Applying context rules from {os.path.basename(self.rules_file)}...")
-                validator = ContextAwareValidator(self.llm, rules_path=self.rules_file)
-                self.df, val_report = validator.validate(self.df, filename=os.path.basename(self.file_path))
-                flag_cols = [c for c in self.df.columns if c.startswith('FLAG_')]
-                if flag_cols:
-                    _safe_stderr(f"   ✅ {len(flag_cols)} FLAG column(s) added: {', '.join(flag_cols)}")
-                else:
-                    _safe_stderr("   ℹ️ No violations found — no FLAG columns added")
-            except Exception as e:
-                _safe_stderr(f"   ⚠️ Validation skipped: {e}")
-
         _safe_stderr(
             f"\n✅ Sanitize done: {len(self.df)} rows, {len(self.df.columns)} columns"
         )
@@ -783,12 +766,11 @@ def main():
             options      = json.loads(sys.argv[3])
             use_llm      = options.get('use_llm', True)
             column_types = options.get('column_types', {})
-            rules_file   = options.get('rules_file', None)
         except Exception:
             pass
 
     try:
-        cleaner  = DataCleaner(input_file, use_llm=use_llm, column_types=column_types, rules_file=rules_file)
+        cleaner  = DataCleaner(input_file, use_llm=use_llm, column_types=column_types)
         df_clean = cleaner.clean()
 
         # Save in the format matching the output file extension

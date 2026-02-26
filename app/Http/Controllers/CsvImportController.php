@@ -579,39 +579,4 @@ private function parseTxtLikeCsv(string $tmpPath, int $maxRows = 3000): array
 
         return view('csv.dashboard', compact('preview','types','charts','fileName'));
     }
-
-    public function fromCleaned(Request $request, string $filename)
-{
-    $userId   = \Illuminate\Support\Facades\Auth::id();
-    $filePath = "/shared_data/cleaned/{$userId}/{$filename}";
-
-    if (!file_exists($filePath)) {
-        return redirect()->route('csv.form')
-            ->with('error', 'Cleaned file not found.');
-    }
-
-    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-
-    [$headers, $rows] = match ($ext) {
-        'csv'        => $this->parseCsvAssoc($filePath, 3000),
-        'txt'        => $this->parseTxtLikeCsv($filePath, 3000),
-        'json'       => $this->parseJson($filePath, 3000),
-        'xml'        => $this->parseXml($filePath, 3000),
-        'xlsx','xls' => $this->parseExcel($filePath, 3000),
-        default      => [[], []],
-    };
-
-    if (!$headers || !$rows) {
-        return redirect()->route('csv.form')
-            ->with('error', 'Could not read the cleaned file.');
-    }
-
-    $fileName = pathinfo($filename, PATHINFO_FILENAME);
-    $preview  = array_slice($rows, 0, 30);
-    $types    = $this->inferColumnTypes($headers, $rows);
-    $charts   = $this->buildCharts($headers, $rows, $types);
-
-    return redirect()->route('csv.dashboard')
-        ->with(compact('preview', 'types', 'charts', 'fileName'));
-}
 }
