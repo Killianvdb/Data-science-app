@@ -43,6 +43,7 @@ Route::prefix('ai-chat')->name('ai-chat.')->group(function () {
     Route::post('/remove-file',[AiChatController::class, 'removeFile']) ->name('remove-file');
     Route::post('/clear-all',  [AiChatController::class, 'clearAll'])   ->name('clear-all');
 });
+
 Route::middleware('auth')->group(function () {
 
 
@@ -51,9 +52,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [CsvImportController::class, 'dashboard'])->name('csv.dashboard');
 
     // Visualization Routes
-    Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
+    /*Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
     Route::post('/visualise/generate', [VisualizationController::class, 'generate'])->name('visualise.generate');
-    Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show');
+    Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show');*/
 
     //Converter page
     Route::get('/convert', [ConvertController::class, 'index'])->name('convert.index');
