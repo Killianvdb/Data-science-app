@@ -43,6 +43,7 @@ Route::prefix('ai-chat')->name('ai-chat.')->group(function () {
     Route::post('/remove-file',[AiChatController::class, 'removeFile']) ->name('remove-file');
     Route::post('/clear-all',  [AiChatController::class, 'clearAll'])   ->name('clear-all');
 });
+
 Route::middleware('auth')->group(function () {
 
 
@@ -55,7 +56,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/visualise/from-cleaned/{filename}', [VisualizationController::class, 'fromCleaned'])->name('visualise.fromCleaned')->where('filename', '.+');
 
     Route::post('/visualise/generate', [VisualizationController::class, 'generate'])->name('visualise.generate');
-    Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show');
+    Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show');*/
 
 
     Route::get('/import/from-cleaned/{filename}', [CsvImportController::class, 'fromCleaned'])->name('csv.fromCleaned')->where('filename', '.+');
