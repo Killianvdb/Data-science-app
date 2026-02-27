@@ -1,11 +1,8 @@
 <x-app-layout :title="'Convert Data'">
     <x-slot name="header">
-        <div class="space-y-1">
-            <h2 class="font-semibold text-2xl text-gray-900 leading-tight">Convert Data</h2>
-            <p class="text-sm text-gray-500">
-                Upload a file and choose an output format. The result will appear below.
-            </p>
-        </div>
+        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+            Convert Data
+        </h2>
     </x-slot>
 
     <div class="max-w-6xl mx-auto p-6 space-y-6">
@@ -70,19 +67,21 @@
                         <option value="txt">TXT (TSV)</option>
                         <option value="csv">CSV</option>
                     </select>
+                <br>
 
                     <p class="mt-2 text-xs text-gray-500">
                         Tip: the target will hide the same format as your input file (e.g. JSON → JSON won’t appear).
                     </p>
                 </div>
+                <br>
 
                 {{-- Actions --}}
-                <div class="flex items-center gap-3">
+                <div class="flex justify-center items-center gap-3">
                     <button
                         id="submitBtn"
                         type="submit"
-                        class="inline-flex items-center justify-center rounded-xl bg-blue-600 px-6 py-3
-                               text-white font-semibold shadow hover:bg-blue-700 disabled:opacity-60"
+                        class="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-6 py-3
+                               text-white font-semibold shadow hover:bg-indigo-700 disabled:opacity-60"
                     >
                         Convert
                     </button>

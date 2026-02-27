@@ -41,7 +41,7 @@
                 @error('message') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
             </div>
 
-            <div>
+            <div class="flex justify-center mt-4">
                 <button type="submit"
                     class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     Send Message

@@ -132,7 +132,7 @@
                     class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
             </div>
 
-            <div>
+            <div class="flex justify-center mt-4">
                 <button type="submit"
                     class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     Update Profile
@@ -152,12 +152,14 @@
                 This action cannot be undone.
             </p>
 
-            <button
-                onclick="document.getElementById('delete-account-modal').classList.remove('hidden')"
-                class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-            >
-                Delete my account
-            </button>
+            <div class="flex justify-center mt-4">
+                <button
+                    onclick="document.getElementById('delete-account-modal').classList.remove('hidden')"
+                    class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                    Delete my account
+                </button>
+            </div>
         </div>
 
         <div id="delete-account-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">

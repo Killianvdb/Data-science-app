@@ -51,6 +51,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/import', [CsvImportController::class, 'import'])->name('csv.import');
     Route::get('/dashboard', [CsvImportController::class, 'dashboard'])->name('csv.dashboard');
 
+    /*
     // Visualization Routes
     Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
     Route::get('/visualise/from-cleaned/{filename}', [VisualizationController::class, 'fromCleaned'])->name('visualise.fromCleaned')->where('filename', '.+');

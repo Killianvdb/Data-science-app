@@ -156,7 +156,7 @@
 .divider { height: 1px; background: #f5f5f5; margin: 18px 0; }
 
 /* ── Submit ── */
-.submit-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+.submit-row { display: flex; align-items: center; flex-direction: column; }
 .btn-submit {
     display: inline-flex; align-items: center; gap: 8px;
     padding: 13px 32px; border-radius: 13px;
@@ -249,13 +249,13 @@
 
 </style>
 
-<div class="up">
+    <x-slot name="header">
+        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+            Upload Dataset
+        </h2>
+    </x-slot>
 
-    {{-- Header --}}
-    <div style="margin-bottom:24px;">
-        <h1 style="font-size:24px;font-weight:700;color:#111;margin:0 0 4px;font-family:'Sora',sans-serif;">Upload Dataset</h1>
-        <p style="font-size:14px;color:#aaa;margin:0;font-family:'Sora',sans-serif;">Clean, validate and enrich your data with AI.</p>
-    </div>
+<div class="up">
 
     @if(session('success'))
     <div style="margin-bottom:12px;padding:12px 16px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;font-size:13px;color:#15803d;font-family:'Sora',sans-serif;">
@@ -443,20 +443,29 @@
 
         {{-- ── Submit ── --}}
         <div class="submit-row">
-            <p style="font-size:12px;color:#bbb;margin:0;font-family:'Sora',sans-serif;">
+            <p class="text-xs text-gray-400 m-0 font-sans">
                 @if(isset($planSlug) && $planSlug === 'pro')
-                    <span style="color:#2563eb;font-weight:600;">Pro</span> · 20 MB max
+                    <span class="font-semibold text-indigo-600">Pro</span> · 20 MB max
+                @elseif(isset($planSlug) && $planSlug === 'medium')
+                    <span class="font-semibold text-indigo-600">Medium</span> · 10 MB max
                 @else
-                    Free plan · <a href="#" style="color:#2563eb;font-weight:500;text-decoration:none;">upgrade</a> for larger files
+                    <span class="font-semibold text-indigo-600">Free</span> · 2 MB max
+                    · <a href="/pricing" class="font-medium text-indigo-600 hover:text-indigo-700">
+                        Upgrade now!
+                    </a>
                 @endif
             </p>
-            <button type="submit" class="btn-submit" id="submitBtn">
-                <span id="submitLabel">Process file</span>
-                <svg id="submitSpinner" class="spin" style="display:none;width:15px;height:15px;" fill="none" viewBox="0 0 24 24">
-                    <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3.5"/>
-                    <path style="opacity:.9" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                </svg>
-            </button>
+            <div class="flex justify-center items-center mt-6">
+                <button type="submit" id="submitBtn"
+                class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2">
+                    <span id="submitLabel">Process file</span>
+                    <svg id="submitSpinner" class="spin" style="display:none;width:15px;height:15px;" fill="none" viewBox="0 0 24 24">
+                        <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3.5"/>
+                        <path style="opacity:.9" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                </button>
+            </div>
+
         </div>
     </form>
 
@@ -927,7 +936,7 @@ function showResults(json){
     if(u.report_pdf) btns.push(dlBtn('PDF Report',    u.report_pdf, 'g'));
     if(u.report)     btns.push(dlBtn('JSON Report',   u.report,     's'));
     var vizFile = u.enriched || u.cleaned;
-    
+
     if(vizFile) {
         var vizFilename = vizFile.split('/').pop().split('?')[0];
         var vizUrl = '/import/from-cleaned/' + encodeURIComponent(vizFilename);

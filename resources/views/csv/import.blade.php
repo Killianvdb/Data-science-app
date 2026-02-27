@@ -1,7 +1,7 @@
 <x-app-layout :title="'File Import - Dashboard'">
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            {{ __('File Import - Dashboard') }}
+            {{ __('Visualize Data') }}
         </h2>
     </x-slot>
 
