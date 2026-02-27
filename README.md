@@ -73,15 +73,6 @@ It is designed for analysts, developers, and businesses who need fast and reliab
 
 - Stripe API  
 
-## Main Modules
-
-- Dataset cleaner  
-- File converter  
-- Interactive chart dashboard  
-- PDF report generator  
-- AI data assistant  
-- Subscription system  
-- Admin panel  
 
 ## Docker Architecture
 
@@ -106,5 +97,14 @@ The application is composed of multiple containers:
 
 Docker ensures isolation between services, easier deployment, and reproducible environments across development and production.
 
+## Main Modules
+
+- Dataset cleaner  
+- File converter  
+- Interactive chart dashboard  
+- PDF report generator  
+- AI data assistant  
+- Subscription system  
+- Admin panel  
 
 
