@@ -43,15 +43,13 @@ Route::prefix('ai-chat')->name('ai-chat.')->group(function () {
     Route::post('/remove-file',[AiChatController::class, 'removeFile']) ->name('remove-file');
     Route::post('/clear-all',  [AiChatController::class, 'clearAll'])   ->name('clear-all');
 });
+
 Route::middleware('auth')->group(function () {
 
     // Visualization Routes
-    Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
-    Route::get('/visualise/from-cleaned/{filename}', [VisualizationController::class, 'fromCleaned'])->name('visualise.fromCleaned')->where('filename', '.+'); 
-
+    /*Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
     Route::post('/visualise/generate', [VisualizationController::class, 'generate'])->name('visualise.generate');
-    Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show');
-    
+    Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show');*/
 
     Route::get('/import/from-cleaned/{filename}', [CsvImportController::class, 'fromCleaned'])->name('csv.fromCleaned')->where('filename', '.+');
     Route::get('/convert', [ConvertController::class, 'index'])->name('convert.index');

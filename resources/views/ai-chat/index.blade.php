@@ -1,77 +1,18 @@
-<x-app-layout>
-
-
 <style>
-    /*
-     * ESCAPE THE LAYOUT CARD
-     * The app layout wraps $slot in:
-     *   <main class="flex-1">
-     *     <div class="max-w-7xl mx-auto px-6 py-6">        ← remove padding
-     *       <div class="relative bg-white/80 ... p-8">     ← remove padding + card styles
-     *
-     * We crawl up and reset all three layers.
-     */
 
-    /* 1. Kill the outer <main> padding/constraints */
-    body > .flex-1,
-    main.flex-1 {
-        padding: 0 !important;
-        overflow: hidden;
-    }
+.chat-wrapper{
+  height: 70vh;
+  min-height: 520px;
+  max-height: 850px;
+}
 
-    /* 2. Kill the max-w-7xl wrapper */
-    main.flex-1 > div {
-        max-width: 100% !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        height: 100%;
-    }
-
-    /* 3. Kill the white card box */
-    main.flex-1 > div > div {
-        background: transparent !important;
-        backdrop-filter: none !important;
-        border-radius: 0 !important;
-        box-shadow: none !important;
-        border: none !important;
-        padding: 0 !important;
-        height: 100%;
-    }
-    /* Remove the card's top gradient bar pseudo-element */
-    main.flex-1 > div > div::before {
-        display: none !important;
-    }
-
-
-    /* Hide the page header and footer on the chat page — we want full screen */
-    body > header,
-    body > footer {
-        display: none !important;
-    }
-
-    /* 4. Make the full body stack correctly */
-    html, body {
-        height: 100%;
-        overflow: hidden;
-    }
-    body {
-        display: flex;
-        flex-direction: column;
-    }
-    main.flex-1 {
-        flex: 1;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-    }
-    main.flex-1 > div,
-    main.flex-1 > div > div {
-        flex: 1;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-    }
-
+.chat-layout{
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+}
     @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap');
 
     :root {
@@ -686,272 +627,290 @@
     }
 </style>
 
+<x-app-layout>
+
+    <x-slot name="header">
+        <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+                {{ __('Data AI Assistant') }}
+            </h2>
+        </div>
+    </x-slot>
+
+<div class="py-6 max-w-7xl mx-auto px-6">
+    <div class="bg-white/80 rounded-2xl p-6 shadow-sm">
+        <div class="chat-wrapper">
+
+            <div class="chat-layout" x-data="aiChat()" x-init="init()">
+
+                {{-- ═══ SIDEBAR ═══ --}}
+                <aside class="sidebar">
+                    <div class="sidebar-header">
+                        <div class="brand-mark">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#0f0f0f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+                            </svg>
+                        </div>
+                        <div class="brand-name">Data<span>AI</span></div>
+                    </div>
+
+                    <div class="sidebar-body">
+                        <div class="section-label">Upload Data</div>
+
+                        <div
+                            class="upload-zone"
+                            :class="{ 'drag-over': isDragging }"
+                            @dragover.prevent="isDragging = true"
+                            @dragleave="isDragging = false"
+                            @drop.prevent="handleDrop($event)"
+                        >
+                            <input type="file" accept=".csv" @change="handleFileSelect($event)" />
+                            <div class="upload-zone-icon">📂</div>
+                            <div class="upload-zone-title">Drop a CSV file</div>
+                            <div class="upload-zone-sub">or click to browse</div>
+                            <div class="upload-zone-limit">
+                                <span x-text="csvFiles.length"></span>/5 files
+                            </div>
+                        </div>
+
+                        <template x-if="csvFiles.length > 0">
+                            <div>
+                                <div class="section-label" style="margin-top:16px;">
+                                    Loaded files
+                                </div>
+                                <div style="display:flex;flex-direction:column;gap:5px;">
+                                    <template x-for="(file, idx) in csvFiles" :key="file.path">
+                                        <div class="file-item">
+                                            <div class="file-icon">📊</div>
+                                            <div class="file-info">
+                                                <div class="file-name" x-text="file.name"></div>
+                                                <div class="file-meta" x-text="`${file.cols} cols · ${file.uploaded}`"></div>
+                                            </div>
+                                            <button class="file-remove" @click="removeFile(file)" title="Remove">✕</button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template x-if="previewData">
+                            <div style="margin-top:12px;">
+                                <div class="section-label">Preview</div>
+                                <div class="preview-wrap">
+                                    <div class="preview-header">
+                                        <span>📋</span>
+                                        <span class="preview-filename" x-text="previewFileName"></span>
+                                    </div>
+                                    <div class="preview-scroll">
+                                        <table class="preview-table">
+                                            <thead>
+                                                <tr>
+                                                    <template x-for="h in previewData.headers" :key="h">
+                                                        <th x-text="h"></th>
+                                                    </template>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="(row, i) in previewData.rows" :key="i">
+                                                    <tr>
+                                                        <template x-for="h in previewData.headers" :key="h">
+                                                            <td x-text="row[h] ?? '—'"></td>
+                                                        </template>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="sidebar-footer">
+                        <button class="sidebar-btn" @click="clearHistory()" :disabled="messages.length === 0">
+                            <span class="sidebar-btn-icon">🗑</span> Clear conversation
+                        </button>
+                        <button class="sidebar-btn danger" @click="clearAll()" :disabled="csvFiles.length === 0">
+                            <span class="sidebar-btn-icon">↺</span> Reset everything
+                        </button>
+                    </div>
+                </aside>
+
+                {{-- ═══ MAIN CHAT ═══ --}}
+                <main class="chat-main">
+
+                    {{-- Top bar --}}
+                    <div class="chat-topbar">
+                        <div>
+                            <div class="topbar-title">
+                                <span class="online-dot"></span>
+                                AI Data Analyst
+                            </div>
+                            <div class="topbar-sub" x-text="csvFiles.length > 1 ? `Analyzing ${csvFiles.length} files` : 'Ask anything about your data'"></div>
+                        </div>
+                        <div class="topbar-right">
+                            <template x-if="csvFiles.length > 0">
+                                <div class="file-chips">
+                                    <template x-for="f in csvFiles.slice(0,3)" :key="f.path">
+                                        <span class="file-chip active" x-text="f.name.length > 14 ? f.name.slice(0,14)+'…' : f.name"></span>
+                                    </template>
+                                    <template x-if="csvFiles.length > 3">
+                                        <span class="file-chip" x-text="`+${csvFiles.length - 3}`"></span>
+                                    </template>
+                                </div>
+                            </template>
+                            <template x-if="csvFiles.length === 0">
+                                <span class="no-file-badge">No file loaded</span>
+                            </template>
+                        </div>
+                    </div>
+
+                    {{-- Messages --}}
+                    <div class="messages-container" id="messages-container">
+                        <div class="messages-inner">
+
+                            <template x-if="messages.length === 0">
+                                <div class="empty-state">
+                                    <div class="empty-hero">🧠</div>
+                                    <h2 class="empty-title">What would you like to know?</h2>
+                                    <p class="empty-sub">
+                                        Upload up to <strong style="color:var(--accent)">5 CSV files</strong> in the sidebar, then ask anything — summaries, comparisons, statistics, anomalies, and more.
+                                    </p>
+                                    <div class="suggestion-grid">
+                                        <div class="suggestion-card" @click="setQuestion('How many rows does each file have?')">
+                                            <div class="suggestion-card-icon">📊</div>
+                                            <div class="suggestion-card-label">File summary</div>
+                                            <div class="suggestion-card-sub">Row counts & column overview</div>
+                                        </div>
+                                        <div class="suggestion-card" @click="setQuestion('Compare the data across all files')">
+                                            <div class="suggestion-card-icon">🔄</div>
+                                            <div class="suggestion-card-label">Compare files</div>
+                                            <div class="suggestion-card-sub">Find patterns across datasets</div>
+                                        </div>
+                                        <div class="suggestion-card" @click="setQuestion('What are the top 5 most important items?')">
+                                            <div class="suggestion-card-icon">🏆</div>
+                                            <div class="suggestion-card-label">Top 5 items</div>
+                                            <div class="suggestion-card-sub">Ranked by importance</div>
+                                        </div>
+                                        <div class="suggestion-card" @click="setQuestion('Are there any missing or anomalous values?')">
+                                            <div class="suggestion-card-icon">🔍</div>
+                                            <div class="suggestion-card-label">Find anomalies</div>
+                                            <div class="suggestion-card-sub">Missing & outlier detection</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <template x-if="messages.length > 0">
+                                <div class="conversation-divider">
+                                    <div class="divider-line"></div>
+                                    <div class="divider-label">Today</div>
+                                    <div class="divider-line"></div>
+                                </div>
+                            </template>
+
+                            <template x-for="(msg, idx) in messages" :key="idx">
+                                <div class="message-row" :class="msg.role">
+                                    <div class="message-header">
+                                        <div class="msg-avatar" :class="msg.role">
+                                            <span x-text="msg.role === 'user' ? 'You' : 'AI'"></span>
+                                        </div>
+                                        <span class="msg-name" x-text="msg.role === 'user' ? 'You' : 'AI Analyst'"></span>
+                                        <span class="msg-time" x-text="msg.time"></span>
+                                    </div>
+                                    <div
+                                        class="message-body"
+                                        :class="msg.role === 'user' ? 'user-body' : ''"
+                                        x-html="msg.role === 'ai' ? renderMarkdown(msg.content) : escapeHtml(msg.content)"
+                                    ></div>
+                                </div>
+                            </template>
+
+                            <template x-if="isTyping">
+                                <div class="message-row ai typing-row">
+                                    <div class="message-header">
+                                        <div class="msg-avatar ai">AI</div>
+                                        <span class="msg-name">AI Analyst</span>
+                                        <span class="msg-time">typing…</span>
+                                    </div>
+                                    <div class="typing-inner" style="padding-left:35px;">
+                                        <div class="typing-dot"></div>
+                                        <div class="typing-dot"></div>
+                                        <div class="typing-dot"></div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <template x-if="errorMsg">
+                                <div class="error-row">
+                                    <div class="error-inline">
+                                        <span>⚠</span>
+                                        <span x-text="errorMsg"></span>
+                                    </div>
+                                </div>
+                            </template>
+
+                        </div>
+                    </div>
+
+                    {{-- Input bar --}}
+                    <div class="input-area">
+                        <div class="input-area-inner">
+                            <div class="input-box">
+                                <textarea
+                                    x-model="userInput"
+                                    :placeholder="csvFiles.length === 0 ? 'Upload a CSV file first…' : csvFiles.length > 1 ? 'e.g. Compare the trends across all files…' : 'e.g. What is the average value in column B?'"
+                                    rows="1"
+                                    @keydown.enter.prevent="handleEnter($event)"
+                                    @input="autoResize($event)"
+                                    :disabled="isTyping || csvFiles.length === 0"
+                                    id="chat-input"
+                                ></textarea>
+                                <div class="input-footer">
+                                    <div class="input-hint">
+                                        <template x-if="csvFiles.length === 0">
+                                            <span>⬅ Upload a CSV to start</span>
+                                        </template>
+                                        <template x-if="csvFiles.length > 0">
+                                            <span>↵ Send &nbsp;·&nbsp; ⇧↵ New line</span>
+                                        </template>
+                                    </div>
+                                    <div class="send-row">
+                                        <span class="char-count" x-show="userInput.length > 0" x-text="`${userInput.length}`"></span>
+                                        <button
+                                            class="send-btn"
+                                            @click="sendMessage()"
+                                            :disabled="isTyping || !userInput.trim() || csvFiles.length === 0"
+                                        >
+                                            Send
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </main>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 <script>
+
 (function() {
     var nav = document.getElementById('app-nav');
     if (nav) {
         document.documentElement.style.setProperty('--nav-h', nav.offsetHeight + 'px');
     }
 })();
-</script>
 
-<div class="chat-layout" x-data="aiChat()" x-init="init()">
 
-    {{-- ═══ SIDEBAR ═══ --}}
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <div class="brand-mark">
-                <svg viewBox="0 0 24 24" fill="none" stroke="#0f0f0f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
-                </svg>
-            </div>
-            <div class="brand-name">Data<span>AI</span></div>
-        </div>
-
-        <div class="sidebar-body">
-            <div class="section-label">Upload Data</div>
-
-            <div
-                class="upload-zone"
-                :class="{ 'drag-over': isDragging }"
-                @dragover.prevent="isDragging = true"
-                @dragleave="isDragging = false"
-                @drop.prevent="handleDrop($event)"
-            >
-                <input type="file" accept=".csv" @change="handleFileSelect($event)" />
-                <div class="upload-zone-icon">📂</div>
-                <div class="upload-zone-title">Drop a CSV file</div>
-                <div class="upload-zone-sub">or click to browse</div>
-                <div class="upload-zone-limit">
-                    <span x-text="csvFiles.length"></span>/5 files
-                </div>
-            </div>
-
-            <template x-if="csvFiles.length > 0">
-                <div>
-                    <div class="section-label" style="margin-top:16px;">
-                        Loaded files
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:5px;">
-                        <template x-for="(file, idx) in csvFiles" :key="file.path">
-                            <div class="file-item">
-                                <div class="file-icon">📊</div>
-                                <div class="file-info">
-                                    <div class="file-name" x-text="file.name"></div>
-                                    <div class="file-meta" x-text="`${file.cols} cols · ${file.uploaded}`"></div>
-                                </div>
-                                <button class="file-remove" @click="removeFile(file)" title="Remove">✕</button>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-            </template>
-
-            <template x-if="previewData">
-                <div style="margin-top:12px;">
-                    <div class="section-label">Preview</div>
-                    <div class="preview-wrap">
-                        <div class="preview-header">
-                            <span>📋</span>
-                            <span class="preview-filename" x-text="previewFileName"></span>
-                        </div>
-                        <div class="preview-scroll">
-                            <table class="preview-table">
-                                <thead>
-                                    <tr>
-                                        <template x-for="h in previewData.headers" :key="h">
-                                            <th x-text="h"></th>
-                                        </template>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <template x-for="(row, i) in previewData.rows" :key="i">
-                                        <tr>
-                                            <template x-for="h in previewData.headers" :key="h">
-                                                <td x-text="row[h] ?? '—'"></td>
-                                            </template>
-                                        </tr>
-                                    </template>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </template>
-        </div>
-
-        <div class="sidebar-footer">
-            <button class="sidebar-btn" @click="clearHistory()" :disabled="messages.length === 0">
-                <span class="sidebar-btn-icon">🗑</span> Clear conversation
-            </button>
-            <button class="sidebar-btn danger" @click="clearAll()" :disabled="csvFiles.length === 0">
-                <span class="sidebar-btn-icon">↺</span> Reset everything
-            </button>
-        </div>
-    </aside>
-
-    {{-- ═══ MAIN CHAT ═══ --}}
-    <main class="chat-main">
-
-        {{-- Top bar --}}
-        <div class="chat-topbar">
-            <div>
-                <div class="topbar-title">
-                    <span class="online-dot"></span>
-                    AI Data Analyst
-                </div>
-                <div class="topbar-sub" x-text="csvFiles.length > 1 ? `Analyzing ${csvFiles.length} files` : 'Ask anything about your data'"></div>
-            </div>
-            <div class="topbar-right">
-                <template x-if="csvFiles.length > 0">
-                    <div class="file-chips">
-                        <template x-for="f in csvFiles.slice(0,3)" :key="f.path">
-                            <span class="file-chip active" x-text="f.name.length > 14 ? f.name.slice(0,14)+'…' : f.name"></span>
-                        </template>
-                        <template x-if="csvFiles.length > 3">
-                            <span class="file-chip" x-text="`+${csvFiles.length - 3}`"></span>
-                        </template>
-                    </div>
-                </template>
-                <template x-if="csvFiles.length === 0">
-                    <span class="no-file-badge">No file loaded</span>
-                </template>
-            </div>
-        </div>
-
-        {{-- Messages --}}
-        <div class="messages-container" id="messages-container">
-            <div class="messages-inner">
-
-                <template x-if="messages.length === 0">
-                    <div class="empty-state">
-                        <div class="empty-hero">🧠</div>
-                        <h2 class="empty-title">What would you like to know?</h2>
-                        <p class="empty-sub">
-                            Upload up to <strong style="color:var(--accent)">5 CSV files</strong> in the sidebar, then ask anything — summaries, comparisons, statistics, anomalies, and more.
-                        </p>
-                        <div class="suggestion-grid">
-                            <div class="suggestion-card" @click="setQuestion('How many rows does each file have?')">
-                                <div class="suggestion-card-icon">📊</div>
-                                <div class="suggestion-card-label">File summary</div>
-                                <div class="suggestion-card-sub">Row counts & column overview</div>
-                            </div>
-                            <div class="suggestion-card" @click="setQuestion('Compare the data across all files')">
-                                <div class="suggestion-card-icon">🔄</div>
-                                <div class="suggestion-card-label">Compare files</div>
-                                <div class="suggestion-card-sub">Find patterns across datasets</div>
-                            </div>
-                            <div class="suggestion-card" @click="setQuestion('What are the top 5 most important items?')">
-                                <div class="suggestion-card-icon">🏆</div>
-                                <div class="suggestion-card-label">Top 5 items</div>
-                                <div class="suggestion-card-sub">Ranked by importance</div>
-                            </div>
-                            <div class="suggestion-card" @click="setQuestion('Are there any missing or anomalous values?')">
-                                <div class="suggestion-card-icon">🔍</div>
-                                <div class="suggestion-card-label">Find anomalies</div>
-                                <div class="suggestion-card-sub">Missing & outlier detection</div>
-                            </div>
-                        </div>
-                    </div>
-                </template>
-
-                <template x-if="messages.length > 0">
-                    <div class="conversation-divider">
-                        <div class="divider-line"></div>
-                        <div class="divider-label">Today</div>
-                        <div class="divider-line"></div>
-                    </div>
-                </template>
-
-                <template x-for="(msg, idx) in messages" :key="idx">
-                    <div class="message-row" :class="msg.role">
-                        <div class="message-header">
-                            <div class="msg-avatar" :class="msg.role">
-                                <span x-text="msg.role === 'user' ? 'You' : 'AI'"></span>
-                            </div>
-                            <span class="msg-name" x-text="msg.role === 'user' ? 'You' : 'AI Analyst'"></span>
-                            <span class="msg-time" x-text="msg.time"></span>
-                        </div>
-                        <div
-                            class="message-body"
-                            :class="msg.role === 'user' ? 'user-body' : ''"
-                            x-html="msg.role === 'ai' ? renderMarkdown(msg.content) : escapeHtml(msg.content)"
-                        ></div>
-                    </div>
-                </template>
-
-                <template x-if="isTyping">
-                    <div class="message-row ai typing-row">
-                        <div class="message-header">
-                            <div class="msg-avatar ai">AI</div>
-                            <span class="msg-name">AI Analyst</span>
-                            <span class="msg-time">typing…</span>
-                        </div>
-                        <div class="typing-inner" style="padding-left:35px;">
-                            <div class="typing-dot"></div>
-                            <div class="typing-dot"></div>
-                            <div class="typing-dot"></div>
-                        </div>
-                    </div>
-                </template>
-
-                <template x-if="errorMsg">
-                    <div class="error-row">
-                        <div class="error-inline">
-                            <span>⚠</span>
-                            <span x-text="errorMsg"></span>
-                        </div>
-                    </div>
-                </template>
-
-            </div>
-        </div>
-
-        {{-- Input bar --}}
-        <div class="input-area">
-            <div class="input-area-inner">
-                <div class="input-box">
-                    <textarea
-                        x-model="userInput"
-                        :placeholder="csvFiles.length === 0 ? 'Upload a CSV file first…' : csvFiles.length > 1 ? 'e.g. Compare the trends across all files…' : 'e.g. What is the average value in column B?'"
-                        rows="1"
-                        @keydown.enter.prevent="handleEnter($event)"
-                        @input="autoResize($event)"
-                        :disabled="isTyping || csvFiles.length === 0"
-                        id="chat-input"
-                    ></textarea>
-                    <div class="input-footer">
-                        <div class="input-hint">
-                            <template x-if="csvFiles.length === 0">
-                                <span>⬅ Upload a CSV to start</span>
-                            </template>
-                            <template x-if="csvFiles.length > 0">
-                                <span>↵ Send &nbsp;·&nbsp; ⇧↵ New line</span>
-                            </template>
-                        </div>
-                        <div class="send-row">
-                            <span class="char-count" x-show="userInput.length > 0" x-text="`${userInput.length}`"></span>
-                            <button
-                                class="send-btn"
-                                @click="sendMessage()"
-                                :disabled="isTyping || !userInput.trim() || csvFiles.length === 0"
-                            >
-                                Send
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    </main>
-</div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
-<script>
 function aiChat() {
     return {
         userInput:       '',

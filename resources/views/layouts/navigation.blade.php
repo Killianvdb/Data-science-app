@@ -25,10 +25,6 @@
                             {{ __('Visualize Data') }}
                         </x-nav-link>
 
-                        <x-nav-link :href="route('pricing')" :active="request()->routeIs('pricing')">
-                            {{ __('Pricing') }}
-                        </x-nav-link>
-
                         <x-nav-link :href="route('datasets.files')" :active="request()->routeIs('datasets.files')">
                             {{ __('My Datasets') }}
                         </x-nav-link>
@@ -39,6 +35,10 @@
 
                         <x-nav-link :href="route('convert.index')" :active="request()->routeIs('convert.index')">
                             {{ __('Convert Data') }}
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('pricing')" :active="request()->routeIs('pricing')">
+                            {{ __('Pricing') }}
                         </x-nav-link>
 
                         @if(auth()->check() && auth()->user()->role === 'admin')
