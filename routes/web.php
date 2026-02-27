@@ -46,10 +46,18 @@ Route::prefix('ai-chat')->name('ai-chat.')->group(function () {
 
 Route::middleware('auth')->group(function () {
 
+
+    Route::get('/import', [CsvImportController::class, 'form'])->name('csv.form');
+    Route::post('/import', [CsvImportController::class, 'import'])->name('csv.import');
+    Route::get('/dashboard', [CsvImportController::class, 'dashboard'])->name('csv.dashboard');
+
     // Visualization Routes
-    /*Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
+    Route::get('/visualise', [VisualizationController::class, 'index'])->name('visualise.index');
+    Route::get('/visualise/from-cleaned/{filename}', [VisualizationController::class, 'fromCleaned'])->name('visualise.fromCleaned')->where('filename', '.+');
+
     Route::post('/visualise/generate', [VisualizationController::class, 'generate'])->name('visualise.generate');
     Route::get('/visualise/{id}', [VisualizationController::class, 'show'])->name('visualise.show');*/
+
 
     Route::get('/import/from-cleaned/{filename}', [CsvImportController::class, 'fromCleaned'])->name('csv.fromCleaned')->where('filename', '.+');
     Route::get('/convert', [ConvertController::class, 'index'])->name('convert.index');
