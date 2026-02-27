@@ -1,4 +1,4 @@
-FROM php:8.2-fpm
+FROM php:8.4-fpm
 
 RUN echo "upload_max_filesize = 100M" > /usr/local/etc/php/conf.d/uploads.ini && \
     echo "post_max_size = 100M" >> /usr/local/etc/php/conf.d/uploads.ini && \

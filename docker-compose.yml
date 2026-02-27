@@ -1,59 +1,117 @@
 services:
+
   postgres:
+
     image: postgres:16-alpine
+
     container_name: datasci-postgres
+
     restart: unless-stopped
+
     environment:
+
       POSTGRES_DB: ${DB_DATABASE:-laravel}
+
       POSTGRES_USER: ${DB_USERNAME:-appuser}
+
       POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+
     ports:
+
       - "${DB_PORT:-5432}:5432"
+
     volumes:
+
       - postgres_data:/var/lib/postgresql/data
+
     networks:
+
       - datasci_net
+
     healthcheck:
+
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-appuser} -d ${DB_DATABASE:-laravel}"]
+
       interval: 10s
+
       timeout: 5s
+
       retries: 5
 
   app:
+
     build:
+
       context: .
+
       dockerfile: Dockerfile
+
     container_name: datasci-app
+
     restart: unless-stopped
+
     ports:
+
       - "8000:8000"
+
       - "5173:5173"
+
     environment:
+
       APP_KEY: ${APP_KEY}
+
       APP_URL: ${APP_URL:-http://localhost:8000}
+
       APP_ENV: ${APP_ENV:-local}
+
       APP_DEBUG: ${APP_DEBUG:-true}
+
       DB_CONNECTION: pgsql
+
       DB_HOST: postgres
+
       DB_PORT: 5432
+
       DB_DATABASE: ${DB_DATABASE:-laravel}
+
       DB_USERNAME: ${DB_USERNAME:-appuser}
+
       DB_PASSWORD: ${DB_PASSWORD}
+
       CACHE_DRIVER: file
+
       SESSION_DRIVER: file
+
       QUEUE_CONNECTION: database
+
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY}
+
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+
     volumes:
+
       - ./:/app
+
       - ./storage/app/shared_data:/shared_data
+
       - /var/run/docker.sock:/var/run/docker.sock
+
     env_file:
+
     - .env
+
     networks:
+
       - datasci_net
+
     depends_on:
+
       postgres:
+
         condition: service_healthy
+
     command: >
           sh -c "
             echo '🔗 Creating storage symlink...' &&
@@ -74,83 +132,153 @@ services:
           "
 
   python:
+
     build:
+
       context: .
+
       dockerfile: Dockerfile.python
+
     container_name: datasci-python
+
     restart: unless-stopped
+
     environment:
+
       PYTHONUNBUFFERED: 1
+
       GROQ_API_KEY: ${GROQ_API_KEY}
+
       DATABASE_URL: postgresql://${DB_USERNAME:-appuser}:${DB_PASSWORD}@postgres:5432/${DB_DATABASE:-laravel}
+
     volumes:
+
       - ./storage/app/shared_data:/shared_data
+
     networks:
+
       - datasci_net
+
     command: ["tail", "-f", "/dev/null"]
 
 
   scheduler:
+
       build:
+
         context: .
+
         dockerfile: Dockerfile
+
       container_name: datasci-scheduler
+
       restart: unless-stopped
+
       environment:
+
         APP_KEY: ${APP_KEY}
+
         APP_URL: ${APP_URL:-http://localhost:8000}
+
         APP_ENV: ${APP_ENV:-local}
+
         APP_DEBUG: ${APP_DEBUG:-true}
+
         DB_CONNECTION: pgsql
+
         DB_HOST: postgres
+
         DB_PORT: 5432
+
         DB_DATABASE: ${DB_DATABASE:-laravel}
+
         DB_USERNAME: ${DB_USERNAME:-appuser}
+
         DB_PASSWORD: ${DB_PASSWORD}
+
         CACHE_DRIVER: file
+
         SESSION_DRIVER: file
+
         QUEUE_CONNECTION: database
+
         GROQ_API_KEY: ${GROQ_API_KEY:-}
+
+        MISTRAL_API_KEY: ${MISTRAL_API_KEY}
+
+        GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+
       volumes:
+
         - ./:/app
+
         - ./storage/app/shared_data:/shared_data
+
       env_file:
+
       - .env
+
       networks:
+
         - datasci_net
+
       depends_on:
+
         postgres:
+
           condition: service_healthy
+
       command: >
+
         sh -c "
+
           echo 'Scheduler running...' &&
+
           while true; do
+
             php artisan schedule:run --no-interaction;
+
             sleep 60;
+
           done
+
         "
 
   stripe:
+
     image: stripe/stripe-cli:latest
+
     container_name: datasci-stripe
+
     restart: unless-stopped
+
     command: listen --forward-to http://app:8000/stripe/webhook
+
     environment:
+
       STRIPE_API_KEY: ${STRIPE_API_KEY}
+
     volumes:
+
       - stripe_cli_config:/root/.config/stripe
+
     networks:
+
       - datasci_net
+
     depends_on:
+
       - app
 
 
 networks:
+
   datasci_net:
+
     driver: bridge
 
 volumes:
+
   postgres_data:
+
   stripe_cli_config:
-
-
