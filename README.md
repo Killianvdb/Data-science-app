@@ -82,3 +82,29 @@ It is designed for analysts, developers, and businesses who need fast and reliab
 - AI data assistant  
 - Subscription system  
 - Admin panel  
+
+## Docker Architecture
+
+CleanMyData runs using Docker to ensure a consistent and scalable development and production environment.
+
+The application is composed of multiple containers:
+
+- **App container (Laravel)**  
+  Runs the main Laravel application, handles authentication, dashboards, file processing, and API endpoints.
+
+- **Python container**  
+  Executes data processing tasks, cleaning pipelines, and AI-related operations.
+
+- **Scheduler container**  
+  Runs scheduled background jobs such as automated processing, maintenance tasks, and queue handling.
+
+- **Stripe service container**  
+  Handles payment processing, subscription events, and webhook integration.
+
+- **PostgreSQL container**  
+  Stores application data, user accounts, subscriptions, and dataset metadata.
+
+Docker ensures isolation between services, easier deployment, and reproducible environments across development and production.
+
+
+
