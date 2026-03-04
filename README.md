@@ -60,6 +60,36 @@ If you want to contribute to the project, follow these steps:
 
 4. Open a pull request.
 
+   ## Tools and Technologies
+
+This project utilizes several tools and technologies to achieve its functionality:
+
+- **Python**: The primary programming language used for developing the application.
+- **Flask**: A web framework for building web applications in Python.
+- **Pandas**: Used for data manipulation and analysis.
+- **NumPy**: A library for numerical computations in Python.
+- **Matplotlib/Seaborn**: Libraries for data visualization.
+- **Scikit-learn**: A machine learning library for Python.
+- **APIs**: Integration with external APIs for data retrieval and interaction.
+
+## Using the Project
+
+1. **Installation**: To install the required packages, run:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. **Running the Application**: Use the following command to run the app locally:
+   ```bash
+   python app.py
+   ```
+3. **Accessing the Application**: Open your web browser and go to `http://127.0.0.1:5000/`.
+
+4. **Using APIs**: Instructions on how to interact with the incorporated APIs will be provided in the documentation, including endpoints and expected inputs and outputs.
+
+## Conclusion
+
+This comprehensive documentation will assist users in understanding the project's structure, the tools used, and how to utilize the application effectively. For more information, refer to the official documentation or source code.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
